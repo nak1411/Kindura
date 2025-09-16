@@ -41,7 +41,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		description: "",
 		room_type: "focus" as ParallelRoom["room_type"],
 		max_capacity: 8,
-		ambient_sound: "",
 		faith_content: false,
 	});
 	const { theme } = useTheme();
@@ -191,6 +190,45 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		}
 	};
 
+	const leaveRoom = async (roomId: string) => {
+		if (!user) return;
+
+		Alert.alert("Leave Room", "Are you sure you want to leave this room?", [
+			{ text: "Cancel", style: "cancel" },
+			{
+				text: "Leave",
+				style: "destructive",
+				onPress: async () => {
+					try {
+						// Get current room data
+						const { data: roomData } = await supabase
+							.from("parallel_rooms")
+							.select("current_participants")
+							.eq("id", roomId)
+							.single();
+
+						if (roomData) {
+							const updatedParticipants = roomData.current_participants.filter(
+								(id: string) => id !== user.id
+							);
+
+							await supabase
+								.from("parallel_rooms")
+								.update({ current_participants: updatedParticipants })
+								.eq("id", roomId);
+
+							setJoinedRoom(null);
+							loadRooms(); // Refresh the room list
+						}
+					} catch (error) {
+						console.error("Error leaving room:", error);
+						Alert.alert("Error", "Failed to leave room");
+					}
+				},
+			},
+		]);
+	};
+
 	const createRoom = async () => {
 		if (!user || !newRoom.name.trim()) {
 			Alert.alert("Error", "Please enter a room name");
@@ -206,7 +244,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 					max_capacity: newRoom.max_capacity,
 					current_participants: [user.id],
 					faith_content: newRoom.faith_content,
-					ambient_sound: newRoom.ambient_sound || null,
+					ambient_sound: null, // Always set to null since we're removing audio
 					created_by: user.id,
 					is_active: true,
 				},
@@ -220,7 +258,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				description: "",
 				room_type: "focus",
 				max_capacity: 8,
-				ambient_sound: "",
 				faith_content: false,
 			});
 
@@ -308,31 +345,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 						style={styles.occupancyBar}
 					/>
 
-					{item.ambient_sound && (
-						<View
-							style={[
-								styles.promptContainer,
-								{ backgroundColor: theme.colors.surfaceVariant },
-							]}
-						>
-							<Text
-								variant="labelMedium"
-								style={[styles.promptLabel, { color: theme.colors.primary }]}
-							>
-								Ambient Sound
-							</Text>
-							<Text
-								variant="bodySmall"
-								style={[
-									styles.promptText,
-									{ color: theme.colors.onSurfaceVariant },
-								]}
-							>
-								{item.ambient_sound}
-							</Text>
-						</View>
-					)}
-
 					<View style={styles.roomFooter}>
 						<View style={styles.roomTags}>
 							<Chip mode="outlined" compact>
@@ -347,25 +359,37 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 
 						<View style={styles.roomActions}>
 							{isJoined ? (
-								<Button
-									mode="contained"
-									compact
-									onPress={() =>
-										navigation.navigate("RoomDetail", { roomId: item.id })
-									}
-									style={styles.actionButton}
-								>
-									Enter
-								</Button>
+								<>
+									<Button
+										mode="contained"
+										onPress={() =>
+											navigation.navigate("RoomDetail", { roomId: item.id })
+										}
+										compact
+										style={{ marginRight: 8 }}
+									>
+										Continue
+									</Button>
+									<Button
+										mode="outlined"
+										onPress={() => leaveRoom(item.id)}
+										compact
+									>
+										Leave
+									</Button>
+								</>
 							) : (
 								<Button
 									mode="outlined"
-									compact
 									onPress={() => joinRoom(item.id)}
-									disabled={occupancyRatio >= 1}
-									style={styles.actionButton}
+									compact
+									disabled={
+										item.current_participants.length >= item.max_capacity
+									}
 								>
-									{occupancyRatio >= 1 ? "Full" : "Join"}
+									{item.current_participants.length >= item.max_capacity
+										? "Full"
+										: "Join"}
 								</Button>
 							)}
 						</View>
@@ -379,73 +403,58 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		container: {
 			flex: 1,
 			backgroundColor: theme.colors.background,
-			padding: theme.spacing.md,
 		},
 		header: {
-			color: theme.colors.primary,
-			marginBottom: theme.spacing.xs,
-			marginTop: theme.spacing.md,
+			backgroundColor: theme.colors.surface,
+			elevation: 4,
+			paddingTop: 40,
+			paddingBottom: 16,
+			paddingHorizontal: 16,
 		},
-		subheader: {
+		title: {
+			color: theme.colors.primary,
+			fontWeight: "bold",
+		},
+		subtitle: {
 			color: theme.colors.outline,
-			marginBottom: theme.spacing.lg,
-		},
-		activeNotice: {
-			marginBottom: theme.spacing.md,
-			backgroundColor: theme.colors.primaryContainer,
-		},
-		activeNoticeText: {
-			color: theme.colors.primary,
-			textAlign: "center",
+			marginTop: 4,
 		},
 		listContent: {
-			paddingBottom: 100, // Space for FAB
+			padding: 16,
+			paddingBottom: 80, // Space for FAB
 		},
 		roomCard: {
-			marginBottom: theme.spacing.md,
+			marginBottom: 16,
 			elevation: 2,
 		},
 		activeRoomCard: {
 			borderWidth: 2,
+			elevation: 4,
 		},
 		roomHeader: {
 			flexDirection: "row",
 			justifyContent: "space-between",
 			alignItems: "center",
-			marginBottom: theme.spacing.sm,
+			marginBottom: 8,
 		},
 		roomTitle: {
 			flex: 1,
 		},
 		occupancyInfo: {
-			paddingHorizontal: theme.spacing.sm,
-			paddingVertical: theme.spacing.xs,
+			paddingHorizontal: 8,
+			paddingVertical: 4,
 			borderRadius: 12,
 		},
 		occupancyText: {
-			fontWeight: "bold",
+			fontSize: 12,
 		},
 		roomDescription: {
-			marginBottom: theme.spacing.md,
+			marginBottom: 12,
 			lineHeight: 20,
 		},
 		occupancyBar: {
+			marginBottom: 16,
 			height: 4,
-			borderRadius: 2,
-			marginBottom: theme.spacing.md,
-		},
-		promptContainer: {
-			padding: theme.spacing.md,
-			borderRadius: 8,
-			marginBottom: theme.spacing.md,
-		},
-		promptLabel: {
-			fontWeight: "bold",
-			marginBottom: theme.spacing.xs,
-		},
-		promptText: {
-			fontStyle: "italic",
-			lineHeight: 18,
 		},
 		roomFooter: {
 			flexDirection: "row",
@@ -454,108 +463,117 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		},
 		roomTags: {
 			flexDirection: "row",
-			gap: theme.spacing.sm,
-			flex: 1,
-			flexWrap: "wrap",
+			gap: 8,
 		},
 		roomActions: {
 			flexDirection: "row",
-			gap: theme.spacing.xs,
-		},
-		actionButton: {
-			minWidth: 60,
+			gap: 8,
 		},
 		fab: {
 			position: "absolute",
-			right: 16,
-			bottom: 16,
+			margin: 16,
+			right: 0,
+			bottom: 0,
+			backgroundColor: theme.colors.primary,
 		},
 		modal: {
-			padding: 20,
-			justifyContent: "center",
+			margin: 20,
 		},
 		modalContent: {
 			backgroundColor: theme.colors.surface,
-			padding: 24,
+			padding: 20,
 			borderRadius: 16,
-			maxHeight: "90%",
 		},
 		modalTitle: {
 			color: theme.colors.primary,
-			marginBottom: 20,
-			textAlign: "center",
-		},
-		formInput: {
 			marginBottom: 16,
+		},
+		input: {
+			marginBottom: 16,
+			backgroundColor: theme.colors.background,
 		},
 		roomTypeContainer: {
 			marginBottom: 16,
 		},
-		sectionLabel: {
-			color: theme.colors.primary,
+		roomTypeLabel: {
+			color: theme.colors.onSurface,
 			marginBottom: 8,
 		},
-		roomTypeOptions: {
+		roomTypeGrid: {
 			flexDirection: "row",
 			flexWrap: "wrap",
 			gap: 8,
 		},
 		roomTypeChip: {
-			marginBottom: 4,
+			backgroundColor: "transparent",
 		},
-		settingRow: {
+		selectedRoomTypeChip: {
+			backgroundColor: theme.colors.primaryContainer,
+		},
+		capacityContainer: {
+			marginBottom: 16,
+		},
+		capacityLabel: {
+			color: theme.colors.onSurface,
+			marginBottom: 8,
+		},
+		capacitySlider: {
+			marginBottom: 8,
+		},
+		switchContainer: {
 			flexDirection: "row",
 			justifyContent: "space-between",
 			alignItems: "center",
-			marginBottom: 20,
+			marginBottom: 16,
 		},
-		settingText: {
-			flex: 1,
+		switchLabel: {
+			color: theme.colors.onSurface,
 		},
-		settingDescription: {
-			color: theme.colors.outline,
-			marginTop: 2,
-		},
-		modalButtons: {
+		modalActions: {
 			flexDirection: "row",
-			gap: 12,
-			marginTop: 8,
-		},
-		modalButton: {
-			flex: 1,
+			justifyContent: "flex-end",
+			gap: 8,
+			marginTop: 16,
 		},
 	});
 
 	return (
 		<View style={styles.container}>
-			<Text variant="headlineMedium" style={styles.header}>
-				Parallel Rooms
-			</Text>
-			<Text variant="bodyMedium" style={styles.subheader}>
-				Join a peaceful space to work, pray, or create alongside others
-			</Text>
+			{/* Header */}
+			<Surface style={styles.header}>
+				<Text variant="headlineMedium" style={styles.title}>
+					Parallel Rooms
+				</Text>
+				<Text variant="bodyMedium" style={styles.subtitle}>
+					Share focused time with others
+				</Text>
+			</Surface>
 
-			{joinedRoom && (
-				<Card style={styles.activeNotice}>
-					<Card.Content>
-						<Text variant="bodyMedium" style={styles.activeNoticeText}>
-							You're currently in a room. Tap "Enter" to return to it.
-						</Text>
-					</Card.Content>
-				</Card>
-			)}
-
+			{/* Rooms List */}
 			<FlatList
 				data={rooms}
 				renderItem={renderRoom}
 				keyExtractor={(item) => item.id}
+				contentContainerStyle={styles.listContent}
 				refreshControl={
-					<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+					<RefreshControl
+						refreshing={refreshing}
+						onRefresh={onRefresh}
+						colors={[theme.colors.primary]}
+					/>
 				}
 				showsVerticalScrollIndicator={false}
-				contentContainerStyle={styles.listContent}
 			/>
 
+			{/* Create Room FAB */}
+			<FAB
+				icon="plus"
+				style={styles.fab}
+				onPress={() => setShowCreateModal(true)}
+				label="Create Room"
+			/>
+
+			{/* Create Room Modal */}
 			<Portal>
 				<Modal
 					visible={showCreateModal}
@@ -570,36 +588,44 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 						<TextInput
 							label="Room Name"
 							value={newRoom.name}
-							onChangeText={(text) => setNewRoom({ ...newRoom, name: text })}
-							style={styles.formInput}
-							mode="outlined"
+							onChangeText={(text) =>
+								setNewRoom((prev) => ({ ...prev, name: text }))
+							}
+							style={styles.input}
+							maxLength={50}
 						/>
 
 						<TextInput
-							label="Description (Optional)"
+							label="Description (optional)"
 							value={newRoom.description}
 							onChangeText={(text) =>
-								setNewRoom({ ...newRoom, description: text })
+								setNewRoom((prev) => ({ ...prev, description: text }))
 							}
+							style={styles.input}
 							multiline
-							numberOfLines={3}
-							style={styles.formInput}
-							mode="outlined"
+							maxLength={200}
 						/>
 
 						<View style={styles.roomTypeContainer}>
-							<Text variant="titleMedium" style={styles.sectionLabel}>
+							<Text variant="titleSmall" style={styles.roomTypeLabel}>
 								Room Type
 							</Text>
-							<View style={styles.roomTypeOptions}>
+							<View style={styles.roomTypeGrid}>
 								{["focus", "walk", "read", "create", "pray"].map((type) => (
 									<Chip
 										key={type}
+										mode={newRoom.room_type === type ? "flat" : "outlined"}
 										selected={newRoom.room_type === type}
 										onPress={() =>
-											setNewRoom({ ...newRoom, room_type: type as any })
+											setNewRoom((prev) => ({
+												...prev,
+												room_type: type as ParallelRoom["room_type"],
+											}))
 										}
-										style={styles.roomTypeChip}
+										style={[
+											styles.roomTypeChip,
+											newRoom.room_type === type && styles.selectedRoomTypeChip,
+										]}
 									>
 										{getRoomIcon(type)} {type}
 									</Chip>
@@ -607,38 +633,54 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 							</View>
 						</View>
 
-						<View style={styles.settingRow}>
-							<View style={styles.settingText}>
-								<Text
-									variant="bodyLarge"
-									style={{ color: theme.colors.onSurface }}
-								>
-									Faith Content
-								</Text>
-								<Text variant="bodySmall" style={styles.settingDescription}>
-									Include prayer and spiritual elements
-								</Text>
+						<View style={styles.capacityContainer}>
+							<Text variant="titleSmall" style={styles.capacityLabel}>
+								Max Capacity: {newRoom.max_capacity}
+							</Text>
+							<View style={styles.capacitySlider}>
+								{[2, 4, 6, 8, 12].map((capacity) => (
+									<Chip
+										key={capacity}
+										mode={
+											newRoom.max_capacity === capacity ? "flat" : "outlined"
+										}
+										selected={newRoom.max_capacity === capacity}
+										onPress={() =>
+											setNewRoom((prev) => ({
+												...prev,
+												max_capacity: capacity,
+											}))
+										}
+										style={styles.roomTypeChip}
+									>
+										{capacity}
+									</Chip>
+								))}
 							</View>
-							<Switch
-								value={newRoom.faith_content}
-								onValueChange={(value) =>
-									setNewRoom({ ...newRoom, faith_content: value })
-								}
-							/>
 						</View>
 
-						<View style={styles.modalButtons}>
-							<Button
-								mode="outlined"
-								onPress={() => setShowCreateModal(false)}
-								style={styles.modalButton}
-							>
+						{user?.faith_mode && (
+							<View style={styles.switchContainer}>
+								<Text variant="titleSmall" style={styles.switchLabel}>
+									Faith Content
+								</Text>
+								<Switch
+									value={newRoom.faith_content}
+									onValueChange={(value) =>
+										setNewRoom((prev) => ({ ...prev, faith_content: value }))
+									}
+								/>
+							</View>
+						)}
+
+						<View style={styles.modalActions}>
+							<Button mode="outlined" onPress={() => setShowCreateModal(false)}>
 								Cancel
 							</Button>
 							<Button
 								mode="contained"
 								onPress={createRoom}
-								style={styles.modalButton}
+								disabled={!newRoom.name.trim()}
 							>
 								Create
 							</Button>
@@ -646,12 +688,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 					</Surface>
 				</Modal>
 			</Portal>
-
-			<FAB
-				icon="plus"
-				style={styles.fab}
-				onPress={() => setShowCreateModal(true)}
-			/>
 		</View>
 	);
 }
