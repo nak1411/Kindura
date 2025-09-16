@@ -2,7 +2,7 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import QuestFeedScreen from "../screens/quests/QuestFeedScreen";
-import RoomsScreen from "../screens/rooms/RoomsScreen";
+import RoomsNavigator from "./RoomsNavigator";
 import MapScreen from "../screens/map/MapScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import DebugScreen from "../screens/debug/DebugScreen";
@@ -38,10 +38,11 @@ export default function MainNavigator() {
 				},
 				tabBarActiveTintColor: "#6B73FF",
 				tabBarInactiveTintColor: "gray",
+				headerShown: false, // Let individual navigators handle their own headers
 			})}
 		>
 			<Tab.Screen name="Quests" component={QuestFeedScreen} />
-			<Tab.Screen name="Rooms" component={RoomsScreen} />
+			<Tab.Screen name="Rooms" component={RoomsNavigator} />
 			<Tab.Screen name="Map" component={MapScreen} />
 			<Tab.Screen name="Profile" component={ProfileScreen} />
 			{__DEV__ && <Tab.Screen name="Debug" component={DebugScreen} />}
