@@ -162,29 +162,6 @@ export default function QuestFeedScreen() {
 				>
 					{item.description}
 				</Text>
-
-				<View style={styles.questFooter}>
-					<Chip
-						mode="outlined"
-						compact
-						icon={
-							item.mode === "audio"
-								? "microphone"
-								: item.mode === "video"
-								? "video"
-								: item.mode === "text"
-								? "message"
-								: "volume-off"
-						}
-					>
-						{item.mode}
-					</Chip>
-					{item.faith_content && (
-						<Chip mode="outlined" compact icon="heart">
-							Faith
-						</Chip>
-					)}
-				</View>
 			</Card.Content>
 		</Card>
 	);
