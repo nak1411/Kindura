@@ -346,17 +346,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 					/>
 
 					<View style={styles.roomFooter}>
-						<View style={styles.roomTags}>
-							<Chip mode="outlined" compact>
-								{item.room_type}
-							</Chip>
-							{item.faith_content && (
-								<Chip mode="outlined" compact icon="heart">
-									Faith
-								</Chip>
-							)}
-						</View>
-
 						<View style={styles.roomActions}>
 							{isJoined ? (
 								<>
