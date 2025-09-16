@@ -24,8 +24,6 @@ export default function DebugScreen({ navigation }: any) {
 							await supabase.auth.signOut();
 
 							Alert.alert("Success", "All data wiped. Returning to sign in...");
-
-							// Remove the navigation.reset() call - auth state change handles this
 						} catch (error) {
 							console.error("Error wiping data:", error);
 							Alert.alert("Error", "Failed to wipe data");
@@ -101,7 +99,7 @@ export default function DebugScreen({ navigation }: any) {
 	const deleteUserAccountPermanently = async () => {
 		Alert.alert(
 			"⚠️ Delete Account Permanently",
-			"This will PERMANENTLY delete your account and all data from both the database and authentication system. This cannot be undone!\n\nThis includes:\n• User profile and preferences\n• All interaction history\n• Authentication record\n• Local storage data",
+			"This will PERMANENTLY delete your account and all data. This cannot be undone!\n\nThis includes:\n• User profile and preferences\n• All interaction history\n• Authentication record\n• Local storage data",
 			[
 				{ text: "Cancel", style: "cancel" },
 				{
@@ -112,144 +110,124 @@ export default function DebugScreen({ navigation }: any) {
 							console.log("🗑️ Starting permanent account deletion...");
 
 							const {
-								data: { session },
-							} = await supabase.auth.getSession();
+								data: { user },
+							} = await supabase.auth.getUser();
 
-							if (!session?.access_token) {
-								Alert.alert("Error", "No valid session found");
+							if (!user) {
+								Alert.alert("Error", "No user session found");
 								return;
 							}
 
-							console.log("👤 Calling delete user function...");
+							console.log("👤 Deleting user data for:", user.id);
 
-							// Try to use the edge function for complete deletion (recommended)
+							// Step 1: Delete user interactions (foreign key dependencies first)
+							console.log("🔄 Deleting user interactions...");
+							const { error: interactionsError } = await supabase
+								.from("user_interactions")
+								.delete()
+								.eq("user_id", user.id);
+
+							if (interactionsError) {
+								console.warn(
+									"⚠️ Failed to delete interactions:",
+									interactionsError
+								);
+							} else {
+								console.log("✅ User interactions deleted");
+							}
+
+							// Step 2: Remove user from parallel rooms
+							console.log("🔄 Removing from parallel rooms...");
 							try {
-								const { data, error } = await supabase.functions.invoke(
-									"delete-user",
+								const { data: rooms } = await supabase
+									.from("parallel_rooms")
+									.select("id, current_participants")
+									.contains("current_participants", [user.id]);
+
+								if (rooms && rooms.length > 0) {
+									for (const room of rooms) {
+										const updatedParticipants =
+											room.current_participants.filter(
+												(id: string) => id !== user.id
+											);
+
+										await supabase
+											.from("parallel_rooms")
+											.update({ current_participants: updatedParticipants })
+											.eq("id", room.id);
+									}
+									console.log("✅ Removed user from parallel rooms");
+								}
+							} catch (roomError) {
+								console.warn("⚠️ Failed to remove from rooms:", roomError);
+							}
+
+							// Step 3: Delete user profile
+							console.log("🔄 Deleting user profile...");
+							const { error: profileError } = await supabase
+								.from("users")
+								.delete()
+								.eq("id", user.id);
+
+							if (profileError) {
+								console.error(
+									"❌ Failed to delete user profile:",
+									profileError
+								);
+								throw new Error(
+									`Failed to delete profile: ${profileError.message}`
+								);
+							}
+							console.log("✅ User profile deleted");
+
+							// Step 4: Clear local storage
+							console.log("🔄 Clearing local storage...");
+							await AsyncStorage.clear();
+							console.log("✅ Local storage cleared");
+
+							// Step 5: Delete auth user using direct SQL
+							console.log("🔄 Attempting to delete auth record...");
+							try {
+								const { error: authDeleteError } = await supabase.rpc(
+									"delete_auth_user",
 									{
-										headers: {
-											Authorization: `Bearer ${session.access_token}`,
-										},
+										user_id: user.id,
 									}
 								);
 
-								if (error) {
-									throw error;
+								if (authDeleteError) {
+									console.warn(
+										"⚠️ Auth deletion failed via RPC:",
+										authDeleteError
+									);
+									throw authDeleteError;
 								}
 
-								console.log(
-									"✅ User deletion completed via edge function:",
-									data
-								);
+								console.log("✅ Auth user deleted successfully");
 
-								// Clear local storage
-								await AsyncStorage.clear();
-								console.log("✅ Local storage cleared");
-
-								// Show success message
+								// Show complete success message
 								Alert.alert(
-									"Account Deleted",
-									"Your account has been permanently removed from our system. All your data has been deleted.",
+									"Account Completely Deleted",
+									"Your account has been permanently and completely removed from our system, including all login credentials.",
 									[
 										{
 											text: "OK",
 											onPress: () => {
-												// Navigation will be handled by auth state change
-												console.log("✅ Account deletion completed");
+												console.log("✅ Complete account deletion successful");
 											},
 										},
 									]
 								);
+							} catch (authError) {
+								console.warn("⚠️ Could not delete auth record:", authError);
 
-								return; // Exit early if edge function worked
-							} catch (functionError) {
-								console.warn(
-									"⚠️ Edge function failed, falling back to manual deletion:",
-									functionError
-								);
-
-								// Fall back to manual deletion if edge function isn't available
-								const {
-									data: { user },
-								} = await supabase.auth.getUser();
-
-								if (!user) {
-									Alert.alert("Error", "No user session found");
-									return;
-								}
-
-								console.log("👤 Performing manual deletion for:", user.id);
-
-								// Step 1: Delete all related user data in sequence
-								// Delete user interactions first (foreign key dependencies)
-								const { error: interactionsError } = await supabase
-									.from("user_interactions")
-									.delete()
-									.eq("user_id", user.id);
-
-								if (interactionsError) {
-									console.warn(
-										"⚠️ Failed to delete interactions:",
-										interactionsError
-									);
-								} else {
-									console.log("✅ User interactions deleted");
-								}
-
-								// Remove user from any parallel rooms they're currently in
-								try {
-									const { data: rooms } = await supabase
-										.from("parallel_rooms")
-										.select("id, current_participants")
-										.contains("current_participants", [user.id]);
-
-									if (rooms && rooms.length > 0) {
-										for (const room of rooms) {
-											const updatedParticipants =
-												room.current_participants.filter(
-													(id: string) => id !== user.id
-												);
-
-											await supabase
-												.from("parallel_rooms")
-												.update({ current_participants: updatedParticipants })
-												.eq("id", room.id);
-										}
-										console.log("✅ Removed user from parallel rooms");
-									}
-								} catch (roomError) {
-									console.warn("⚠️ Failed to remove from rooms:", roomError);
-								}
-
-								// Step 2: Delete user profile
-								const { error: profileError } = await supabase
-									.from("users")
-									.delete()
-									.eq("id", user.id);
-
-								if (profileError) {
-									console.error(
-										"❌ Failed to delete user profile:",
-										profileError
-									);
-									throw new Error(
-										`Failed to delete profile: ${profileError.message}`
-									);
-								}
-								console.log("✅ User profile deleted");
-
-								// Step 3: Clear local storage
-								await AsyncStorage.clear();
-								console.log("✅ Local storage cleared");
-
-								// Step 4: Sign out (auth user cannot be deleted without admin privileges)
+								// Sign out even if auth deletion failed
 								await supabase.auth.signOut();
-								console.log("✅ User signed out");
 
-								// Show partial success message
+								// Show instructions for manual deletion
 								Alert.alert(
 									"Account Data Deleted",
-									"Your profile and app data have been deleted. However, your authentication record remains active. For complete account deletion including login credentials, please contact support.",
+									"Your profile and app data have been permanently deleted.\n\nAuth record deletion failed. Please:\n1. Contact support for complete removal\n2. Or manually delete from Supabase Dashboard\n\nYou have been signed out.",
 									[
 										{
 											text: "OK",
@@ -290,7 +268,7 @@ export default function DebugScreen({ navigation }: any) {
 
 		Alert.alert(
 			"🧹 DEV: Complete System Wipe",
-			"This development function will:\n• Delete ALL user data\n• Remove auth record\n• Clear local storage\n• Reset app state\n\nOnly use for testing!",
+			"This development function will:\n• Delete ALL user data\n• Clear local storage\n• Sign out\n• Reset app state\n\nOnly use for testing!",
 			[
 				{ text: "Cancel", style: "cancel" },
 				{
@@ -298,21 +276,7 @@ export default function DebugScreen({ navigation }: any) {
 					style: "destructive",
 					onPress: async () => {
 						try {
-							const {
-								data: { user },
-							} = await supabase.auth.getUser();
-
-							if (user) {
-								// Use the same deletion logic as permanent delete
-								await deleteUserAccountPermanently();
-							} else {
-								// If no user, just clear storage and reset
-								await AsyncStorage.clear();
-								Alert.alert(
-									"Dev Wipe",
-									"Local storage cleared. No user to delete."
-								);
-							}
+							await deleteUserAccountPermanently();
 						} catch (error) {
 							console.error("Dev wipe error:", error);
 							await AsyncStorage.clear();
@@ -410,8 +374,9 @@ export default function DebugScreen({ navigation }: any) {
 						</Button>
 
 						<Text variant="bodySmall" style={styles.warningText}>
-							This will permanently delete your account, profile, and all
-							associated data from both the database and authentication system.
+							This will permanently delete your account data from the app
+							database. Login credentials remain active unless you contact
+							support.
 						</Text>
 					</Card.Content>
 				</Card>
