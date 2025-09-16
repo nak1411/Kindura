@@ -41,7 +41,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		description: "",
 		room_type: "focus" as ParallelRoom["room_type"],
 		max_capacity: 8,
-		ambient_sound: "",
 		faith_content: false,
 	});
 
@@ -116,8 +115,8 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				.select("*")
 				.eq("is_active", true);
 
-			// Filter by faith mode if user has it disabled
-			if (user && !user.faith_mode) {
+			// Filter by faith preference
+			if (user?.faith_mode === false) {
 				query = query.eq("faith_content", false);
 			}
 
@@ -126,38 +125,43 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 			});
 
 			if (error) throw error;
+
 			setRooms(data || []);
 
-			// Check if user is in any room
-			if (user) {
-				const userInRoom = data?.find((room) =>
-					room.current_participants.includes(user.id)
-				);
-				setJoinedRoom(userInRoom?.id || null);
-			}
+			// Check if user is already in a room
+			const userRoom = data?.find((room) =>
+				room.current_participants.includes(user?.id)
+			);
+			setJoinedRoom(userRoom?.id || null);
 		} catch (error) {
 			console.error("Error loading rooms:", error);
-			Alert.alert("Error", "Failed to load rooms");
 		} finally {
 			setLoading(false);
-			setRefreshing(false);
 		}
 	};
 
-	const onRefresh = () => {
+	const onRefresh = async () => {
 		setRefreshing(true);
-		loadRooms();
+		await loadRooms();
+		setRefreshing(false);
 	};
+
+	const getRoomTypeOptions = () => [
+		{ label: "🎯 Focus", value: "focus" },
+		{ label: "🚶 Walk", value: "walk" },
+		{ label: "📚 Read", value: "read" },
+		{ label: "🎨 Create", value: "create" },
+		{ label: "🙏 Pray", value: "pray" },
+	];
 
 	const joinRoom = async (room: ParallelRoom) => {
-		if (!user) {
-			Alert.alert("Error", "Please wait while we load your profile");
-			return;
-		}
+		if (!user) return;
 
-		if (room.current_participants.includes(user.id)) {
-			// If user is already in room, navigate to detail screen
-			navigation.navigate("RoomDetail", { roomId: room.id });
+		if (joinedRoom) {
+			Alert.alert(
+				"Already in a room",
+				"You're already in another room. Please leave that room first."
+			);
 			return;
 		}
 
@@ -237,7 +241,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				description: newRoom.description.trim() || null,
 				room_type: newRoom.room_type,
 				max_capacity: newRoom.max_capacity,
-				ambient_sound: newRoom.ambient_sound.trim() || null,
 				faith_content: newRoom.faith_content,
 				current_participants: [user.id],
 				is_active: true,
@@ -245,16 +248,21 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 
 			if (error) throw error;
 
-			Alert.alert("Success!", "Your peaceful space has been created");
-			setShowCreateModal(false);
+			Alert.alert(
+				"Success!",
+				"Your room has been created and you've joined it!"
+			);
+
+			// Reset form
 			setNewRoom({
 				name: "",
 				description: "",
 				room_type: "focus",
 				max_capacity: 8,
-				ambient_sound: "",
 				faith_content: false,
 			});
+
+			setShowCreateModal(false);
 			loadRooms();
 		} catch (error) {
 			console.error("Error creating room:", error);
@@ -262,85 +270,45 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		}
 	};
 
-	const getRoomIcon = (roomType: string) => {
-		switch (roomType) {
-			case "focus":
-				return "🎯";
-			case "walk":
-				return "🚶";
-			case "read":
-				return "📚";
-			case "create":
-				return "🎨";
-			case "pray":
-				return "🙏";
-			default:
-				return "✨";
-		}
-	};
-
-	const getRoomTypeOptions = () => [
-		{ label: "🎯 Focus", value: "focus" },
-		{ label: "🚶 Walking", value: "walk" },
-		{ label: "📚 Reading", value: "read" },
-		{ label: "🎨 Creating", value: "create" },
-		{ label: "🙏 Prayer", value: "pray" },
-	];
-
-	const navigateToRoom = (room: ParallelRoom) => {
-		if (!user) {
-			Alert.alert("Error", "Please wait while we load your profile");
-			return;
-		}
-
-		const isUserInRoom = room.current_participants.includes(user.id);
-
-		if (isUserInRoom) {
-			// Navigate directly to room detail if user is already in the room
-			navigation.navigate("RoomDetail", { roomId: room.id });
-		} else {
-			// Join the room first
-			joinRoom(room);
-		}
-	};
-
 	const renderRoom = ({ item }: { item: ParallelRoom }) => {
-		if (!user) {
-			// Don't render anything if user is not loaded yet
-			return null;
-		}
-
-		const isUserInRoom = item.current_participants.includes(user.id);
-		const occupancy = item.current_participants.length / item.max_capacity;
+		const isUserInRoom = user && item.current_participants.includes(user.id);
+		const occupancyPercentage =
+			item.current_participants.length / item.max_capacity;
 
 		return (
 			<TouchableOpacity
-				onPress={() => navigateToRoom(item)}
+				onPress={() => {
+					if (isUserInRoom) {
+						navigation.navigate("RoomDetail", { roomId: item.id });
+					} else {
+						joinRoom(item);
+					}
+				}}
 				activeOpacity={0.7}
 			>
-				<Card style={[styles.roomCard, isUserInRoom && styles.activeRoomCard]}>
+				<Card style={styles.roomCard}>
 					<Card.Content>
 						<View style={styles.roomHeader}>
-							<Text variant="titleMedium" style={styles.roomTitle}>
-								{getRoomIcon(item.room_type)} {item.name}
+							<Text variant="titleMedium" style={styles.roomName}>
+								{item.name}
 							</Text>
-							<View style={styles.occupancyInfo}>
-								<Text variant="bodySmall" style={styles.occupancyText}>
-									{item.current_participants.length}/{item.max_capacity}
-								</Text>
-							</View>
+							<Text variant="bodySmall" style={styles.participantCount}>
+								{item.current_participants.length}/{item.max_capacity}
+							</Text>
 						</View>
 
 						{item.description && (
-							<Text variant="bodyMedium" style={styles.roomDescription}>
+							<Text variant="bodySmall" style={styles.roomDescription}>
 								{item.description}
 							</Text>
 						)}
 
 						<ProgressBar
-							progress={occupancy}
+							progress={occupancyPercentage}
 							color={
-								occupancy > 0.8 ? theme.colors.error : theme.colors.primary
+								occupancyPercentage >= 1
+									? theme.colors.error
+									: theme.colors.primary
 							}
 							style={styles.occupancyBar}
 						/>
@@ -358,9 +326,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 
 						<View style={styles.roomFooter}>
 							<View style={styles.roomTags}>
-								<Chip compact mode="outlined" icon="volume-medium">
-									{item.ambient_sound || "quiet"}
-								</Chip>
 								{item.faith_content && (
 									<Chip compact mode="outlined" icon="heart">
 										Faith
@@ -519,17 +484,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 							</View>
 						</View>
 
-						<TextInput
-							label="Ambient Sound (optional)"
-							value={newRoom.ambient_sound}
-							onChangeText={(text) =>
-								setNewRoom((prev) => ({ ...prev, ambient_sound: text }))
-							}
-							mode="outlined"
-							style={styles.formInput}
-							placeholder="e.g., rain, forest, quiet"
-						/>
-
 						<View style={styles.settingRow}>
 							<View style={styles.settingText}>
 								<Text variant="bodyMedium">Faith Content</Text>
@@ -559,7 +513,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 								style={styles.modalButton}
 								disabled={!newRoom.name.trim()}
 							>
-								Create
+								Create & Join
 							</Button>
 						</View>
 					</Surface>
@@ -573,35 +527,32 @@ const styles = StyleSheet.create({
 	container: {
 		flex: 1,
 		backgroundColor: theme.colors.background,
-		padding: theme.spacing.md,
+		paddingHorizontal: theme.spacing.lg,
+		paddingTop: 48,
 	},
 	header: {
-		color: theme.colors.primary,
+		color: theme.colors.onBackground,
 		marginBottom: theme.spacing.xs,
-		marginTop: theme.spacing.md,
+		fontWeight: "bold",
 	},
 	subheader: {
 		color: theme.colors.outline,
 		marginBottom: theme.spacing.lg,
 	},
 	activeNotice: {
-		marginBottom: theme.spacing.md,
 		backgroundColor: theme.colors.primaryContainer,
+		marginBottom: theme.spacing.md,
 	},
 	activeNoticeText: {
-		color: theme.colors.primary,
+		color: theme.colors.onPrimaryContainer,
 		textAlign: "center",
 	},
 	listContent: {
-		paddingBottom: 100, // Space for FAB
+		paddingBottom: 100,
 	},
 	roomCard: {
 		marginBottom: theme.spacing.md,
 		elevation: 2,
-	},
-	activeRoomCard: {
-		borderColor: theme.colors.primary,
-		borderWidth: 2,
 	},
 	roomHeader: {
 		flexDirection: "row",
@@ -609,29 +560,28 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		marginBottom: theme.spacing.sm,
 	},
-	roomTitle: {
-		flex: 1,
+	roomName: {
 		color: theme.colors.onSurface,
+		fontWeight: "600",
+		flex: 1,
 	},
-	occupancyInfo: {
+	participantCount: {
+		color: theme.colors.outline,
 		backgroundColor: theme.colors.surfaceVariant,
 		paddingHorizontal: theme.spacing.sm,
-		paddingVertical: theme.spacing.xs,
+		paddingVertical: theme.spacing.xs / 2,
 		borderRadius: 12,
-	},
-	occupancyText: {
-		color: theme.colors.onSurfaceVariant,
-		fontWeight: "bold",
+		fontSize: 12,
 	},
 	roomDescription: {
-		marginBottom: theme.spacing.md,
 		color: theme.colors.onSurfaceVariant,
-		lineHeight: 20,
+		marginBottom: theme.spacing.sm,
+		lineHeight: 16,
 	},
 	occupancyBar: {
 		height: 4,
 		borderRadius: 2,
-		marginBottom: theme.spacing.md,
+		marginBottom: theme.spacing.sm,
 	},
 	promptContainer: {
 		backgroundColor: theme.colors.surfaceVariant,
