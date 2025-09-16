@@ -1,259 +1,340 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert } from "react-native";
 import {
 	Text,
+	Avatar,
 	Card,
 	Button,
-	Avatar,
-	Switch,
 	Chip,
-	Surface,
 	Divider,
+	Switch,
+	List,
 } from "react-native-paper";
 import { supabase } from "../../services/supabase";
-import { theme } from "../../constants/theme";
-import { User } from "../../types";
+import { useTheme } from "../../constants/theme-context";
+import { ThemeToggle } from "../../components/theme-toggle";
+
+type Profile = {
+	id: string;
+	email: string;
+	display_name: string;
+	bio: string | null;
+	care_score: number;
+	faith_mode: boolean;
+	preferences: any;
+	notifications_enabled?: boolean;
+	location_sharing?: boolean;
+	quests_completed?: number;
+	rooms_participated?: number;
+	gentle_nudges_sent?: number;
+};
 
 export default function ProfileScreen() {
-	const [user, setUser] = useState<User | null>(null);
-	const [stats, setStats] = useState({
-		questsCompleted: 0,
-		roomsParticipated: 0,
-		gatheringsAttended: 0,
-	});
+	const [profile, setProfile] = useState<Profile | null>(null);
 	const [loading, setLoading] = useState(true);
+	const { theme } = useTheme(); // Use the theme context
 
 	useEffect(() => {
-		loadUser();
-		loadUserStats();
+		fetchProfile();
 	}, []);
 
-	const loadUser = async () => {
+	const fetchProfile = async () => {
 		try {
 			const {
-				data: { user: authUser },
+				data: { user },
 			} = await supabase.auth.getUser();
-			if (authUser) {
-				const { data, error } = await supabase
-					.from("users")
-					.select("*")
-					.eq("id", authUser.id)
-					.single();
 
-				if (error) throw error;
-				setUser(data);
+			if (!user) return;
+
+			const { data, error } = await supabase
+				.from("users")
+				.select("*")
+				.eq("id", user.id)
+				.single();
+
+			if (error) {
+				console.error("Error fetching profile:", error);
+				return;
 			}
+
+			setProfile({
+				...data,
+				email: user.email || "",
+			});
 		} catch (error) {
-			console.error("Error loading user:", error);
-			Alert.alert("Error", "Failed to load profile");
+			console.error("Error:", error);
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	const loadUserStats = async () => {
-		try {
-			const {
-				data: { user: authUser },
-			} = await supabase.auth.getUser();
-			if (!authUser) return;
-
-			const { data: interactions, error } = await supabase
-				.from("user_interactions")
-				.select("interaction_type")
-				.eq("user_id", authUser.id);
-
-			if (error) throw error;
-
-			const stats = {
-				questsCompleted:
-					interactions?.filter((i) => i.interaction_type === "quest_completed")
-						.length || 0,
-				roomsParticipated:
-					interactions?.filter(
-						(i) => i.interaction_type === "room_participated"
-					).length || 0,
-				gatheringsAttended:
-					interactions?.filter(
-						(i) => i.interaction_type === "gathering_attended"
-					).length || 0,
-			};
-
-			setStats(stats);
-		} catch (error) {
-			console.error("Error loading stats:", error);
-		}
-	};
-
-	const updateFaithMode = async (value: boolean) => {
-		if (!user) return;
-
-		try {
-			const { error } = await supabase
-				.from("users")
-				.update({ faith_mode: value })
-				.eq("id", user.id);
-
-			if (error) throw error;
-			setUser((prev) => (prev ? { ...prev, faith_mode: value } : null));
-		} catch (error) {
-			console.error("Error updating faith mode:", error);
-			Alert.alert("Error", "Failed to update faith mode");
-		}
-	};
-
 	const handleSignOut = async () => {
 		Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-			{ text: "Cancel", style: "cancel" },
+			{
+				text: "Cancel",
+				style: "cancel",
+			},
 			{
 				text: "Sign Out",
 				style: "destructive",
 				onPress: async () => {
 					const { error } = await supabase.auth.signOut();
 					if (error) {
-						Alert.alert("Error", error.message);
+						Alert.alert("Error", "Failed to sign out");
 					}
 				},
 			},
 		]);
 	};
 
-	const getCareScoreBadge = (score: number) => {
-		if (score >= 50) return { label: "Caring Heart", icon: "💙" };
-		if (score >= 25) return { label: "Kind Soul", icon: "💚" };
-		if (score >= 10) return { label: "Gentle Spirit", icon: "🌸" };
-		return { label: "New Friend", icon: "🌱" };
+	const updatePreference = async (key: string, value: boolean) => {
+		if (!profile) return;
+
+		const { error } = await supabase
+			.from("users")
+			.update({ [key]: value })
+			.eq("id", profile.id);
+
+		if (error) {
+			Alert.alert("Error", "Failed to update preference");
+			return;
+		}
+
+		setProfile({ ...profile, [key]: value });
 	};
 
-	if (loading || !user) {
-		return <View style={styles.container} />;
+	if (loading || !profile) {
+		return (
+			<View
+				style={[styles.container, { backgroundColor: theme.colors.background }]}
+			>
+				<Text style={{ color: theme.colors.onBackground }}>Loading...</Text>
+			</View>
+		);
 	}
 
-	const badge = getCareScoreBadge(user.care_score);
-
 	return (
-		<ScrollView style={styles.container}>
-			<Surface style={styles.profileHeader}>
-				<Avatar.Text
-					size={80}
-					label={user.display_name.substring(0, 2).toUpperCase()}
-					style={styles.avatar}
-				/>
-				<Text variant="headlineSmall" style={styles.displayName}>
-					{user.display_name}
-				</Text>
-				<View style={styles.badgeContainer}>
-					<Text variant="titleMedium" style={styles.badgeText}>
-						{badge.icon} {badge.label}
-					</Text>
-					<Text variant="bodySmall" style={styles.careScore}>
-						Care Score: {user.care_score}
-					</Text>
-				</View>
-				{user.bio && (
-					<Text variant="bodyMedium" style={styles.bio}>
-						{user.bio}
-					</Text>
-				)}
-			</Surface>
-
-			<Card style={styles.statsCard}>
+		<ScrollView
+			style={[styles.container, { backgroundColor: theme.colors.background }]}
+		>
+			{/* Profile Header */}
+			<Card
+				style={[
+					styles.profileHeader,
+					{ backgroundColor: theme.colors.surface },
+				]}
+			>
 				<Card.Content>
-					<Text variant="titleMedium" style={styles.statsTitle}>
+					<Avatar.Text
+						size={80}
+						label={profile.display_name.charAt(0).toUpperCase()}
+						style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+					/>
+
+					<Text
+						variant="headlineSmall"
+						style={[styles.displayName, { color: theme.colors.onSurface }]}
+					>
+						{profile.display_name}
+					</Text>
+
+					<View style={styles.badgeContainer}>
+						<Text
+							variant="titleMedium"
+							style={[styles.badgeText, { color: theme.colors.primary }]}
+						>
+							Gentle Soul
+						</Text>
+						<Text
+							variant="bodyMedium"
+							style={[styles.careScore, { color: theme.colors.outline }]}
+						>
+							Care Score: {profile.care_score}
+						</Text>
+					</View>
+
+					{profile.bio && (
+						<Text
+							variant="bodyMedium"
+							style={[styles.bio, { color: theme.colors.onSurfaceVariant }]}
+						>
+							{profile.bio}
+						</Text>
+					)}
+				</Card.Content>
+			</Card>
+
+			{/* Stats */}
+			<Card
+				style={[styles.statsCard, { backgroundColor: theme.colors.surface }]}
+			>
+				<Card.Content>
+					<Text
+						variant="titleLarge"
+						style={[styles.statsTitle, { color: theme.colors.primary }]}
+					>
 						Your Journey
 					</Text>
 					<View style={styles.statsGrid}>
 						<View style={styles.statItem}>
-							<Text variant="headlineMedium" style={styles.statNumber}>
-								{stats.questsCompleted}
+							<Text
+								variant="headlineMedium"
+								style={[styles.statNumber, { color: theme.colors.primary }]}
+							>
+								{profile.quests_completed || 0}
 							</Text>
-							<Text variant="bodySmall" style={styles.statLabel}>
-								Quests Completed
-							</Text>
-						</View>
-						<View style={styles.statItem}>
-							<Text variant="headlineMedium" style={styles.statNumber}>
-								{stats.roomsParticipated}
-							</Text>
-							<Text variant="bodySmall" style={styles.statLabel}>
-								Rooms Visited
+							<Text
+								variant="bodySmall"
+								style={[styles.statLabel, { color: theme.colors.outline }]}
+							>
+								Quests{"\n"}Completed
 							</Text>
 						</View>
 						<View style={styles.statItem}>
-							<Text variant="headlineMedium" style={styles.statNumber}>
-								{stats.gatheringsAttended}
+							<Text
+								variant="headlineMedium"
+								style={[styles.statNumber, { color: theme.colors.primary }]}
+							>
+								{profile.rooms_participated || 0}
 							</Text>
-							<Text variant="bodySmall" style={styles.statLabel}>
-								Gatherings Joined
+							<Text
+								variant="bodySmall"
+								style={[styles.statLabel, { color: theme.colors.outline }]}
+							>
+								Rooms{"\n"}Joined
+							</Text>
+						</View>
+						<View style={styles.statItem}>
+							<Text
+								variant="headlineMedium"
+								style={[styles.statNumber, { color: theme.colors.primary }]}
+							>
+								{profile.gentle_nudges_sent || 0}
+							</Text>
+							<Text
+								variant="bodySmall"
+								style={[styles.statLabel, { color: theme.colors.outline }]}
+							>
+								Gentle{"\n"}Nudges
 							</Text>
 						</View>
 					</View>
 				</Card.Content>
 			</Card>
 
-			<Card style={styles.settingsCard}>
+			{/* Settings */}
+			<Card
+				style={[styles.settingsCard, { backgroundColor: theme.colors.surface }]}
+			>
 				<Card.Content>
-					<Text variant="titleMedium" style={styles.settingsTitle}>
-						Preferences
+					<Text
+						variant="titleLarge"
+						style={[styles.settingsTitle, { color: theme.colors.primary }]}
+					>
+						Settings
 					</Text>
+
+					{/* Theme Toggle */}
+					<ThemeToggle />
+
+					<Divider style={styles.divider} />
 
 					<View style={styles.settingItem}>
 						<View style={styles.settingText}>
-							<Text variant="bodyMedium">Faith Mode</Text>
-							<Text variant="bodySmall" style={styles.settingDescription}>
-								Include spiritual content and prayer circles
+							<Text
+								variant="bodyLarge"
+								style={{ color: theme.colors.onSurface }}
+							>
+								Notifications
+							</Text>
+							<Text
+								variant="bodySmall"
+								style={[
+									styles.settingDescription,
+									{ color: theme.colors.outline },
+								]}
+							>
+								Receive gentle reminders and updates
 							</Text>
 						</View>
-						<Switch value={user.faith_mode} onValueChange={updateFaithMode} />
+						<Switch
+							value={profile.notifications_enabled || false}
+							onValueChange={(value) =>
+								updatePreference("notifications_enabled", value)
+							}
+							color={theme.colors.primary}
+						/>
 					</View>
 
 					<Divider style={styles.divider} />
 
 					<View style={styles.settingItem}>
 						<View style={styles.settingText}>
-							<Text variant="bodyMedium">Communication Comfort</Text>
-							<View style={styles.preferenceTags}>
-								{user.preferences.voice_comfort && (
-									<Chip compact mode="outlined" icon="microphone">
-										Voice
-									</Chip>
-								)}
-								{user.preferences.video_comfort && (
-									<Chip compact mode="outlined" icon="video">
-										Video
-									</Chip>
-								)}
-							</View>
+							<Text
+								variant="bodyLarge"
+								style={{ color: theme.colors.onSurface }}
+							>
+								Location Sharing
+							</Text>
+							<Text
+								variant="bodySmall"
+								style={[
+									styles.settingDescription,
+									{ color: theme.colors.outline },
+								]}
+							>
+								Help find nearby gentle souls
+							</Text>
 						</View>
+						<Switch
+							value={profile.location_sharing || false}
+							onValueChange={(value) =>
+								updatePreference("location_sharing", value)
+							}
+							color={theme.colors.primary}
+						/>
 					</View>
 
-					{user.preferences.topics_to_avoid &&
-						user.preferences.topics_to_avoid.length > 0 && (
+					{profile.preferences &&
+						Array.isArray(profile.preferences) &&
+						profile.preferences.length > 0 && (
 							<>
 								<Divider style={styles.divider} />
-								<View style={styles.settingItem}>
-									<View style={styles.settingText}>
-										<Text variant="bodyMedium">Topics to Keep Gentle</Text>
-										<View style={styles.preferenceTags}>
-											{user.preferences.topics_to_avoid.map((topic, index) => (
-												<Chip key={index} compact mode="outlined">
-													{topic}
-												</Chip>
-											))}
-										</View>
-									</View>
+								<Text
+									variant="bodyLarge"
+									style={{ color: theme.colors.onSurface }}
+								>
+									Preferences
+								</Text>
+								<View style={styles.preferenceTags}>
+									{profile.preferences.map((pref, index) => (
+										<Chip
+											key={index}
+											compact
+											style={{ backgroundColor: theme.colors.primaryContainer }}
+											textStyle={{ color: theme.colors.onPrimaryContainer }}
+										>
+											{pref}
+										</Chip>
+									))}
 								</View>
 							</>
 						)}
 				</Card.Content>
 			</Card>
 
-			<Card style={styles.actionsCard}>
+			{/* Actions */}
+			<Card
+				style={[styles.actionsCard, { backgroundColor: theme.colors.surface }]}
+			>
 				<Card.Content>
 					<Button
 						mode="outlined"
 						onPress={() =>
-							Alert.alert("Coming Soon", "Edit profile will be available soon!")
+							Alert.alert(
+								"Coming Soon",
+								"Profile editing will be available soon!"
+							)
 						}
 						style={styles.actionButton}
 						icon="pencil"
@@ -300,45 +381,39 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: theme.colors.background,
 	},
 	profileHeader: {
 		alignItems: "center",
-		padding: theme.spacing.lg,
-		margin: theme.spacing.md,
+		padding: 24,
+		margin: 16,
 		borderRadius: 16,
 	},
 	avatar: {
-		backgroundColor: theme.colors.primary,
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
+		alignSelf: "center",
 	},
 	displayName: {
-		color: theme.colors.onSurface,
-		marginBottom: theme.spacing.sm,
+		marginBottom: 8,
+		textAlign: "center",
 	},
 	badgeContainer: {
 		alignItems: "center",
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
 	},
 	badgeText: {
-		color: theme.colors.primary,
-		marginBottom: theme.spacing.xs,
+		marginBottom: 4,
 	},
-	careScore: {
-		color: theme.colors.outline,
-	},
+	careScore: {},
 	bio: {
 		textAlign: "center",
-		color: theme.colors.onSurfaceVariant,
 		lineHeight: 20,
 	},
 	statsCard: {
-		margin: theme.spacing.md,
+		margin: 16,
 		marginTop: 0,
 	},
 	statsTitle: {
-		color: theme.colors.primary,
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
 		textAlign: "center",
 	},
 	statsGrid: {
@@ -349,53 +424,49 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 	},
 	statNumber: {
-		color: theme.colors.primary,
 		fontWeight: "bold",
 	},
 	statLabel: {
-		color: theme.colors.outline,
 		textAlign: "center",
-		marginTop: theme.spacing.xs,
+		marginTop: 4,
 	},
 	settingsCard: {
-		margin: theme.spacing.md,
+		margin: 16,
 		marginTop: 0,
 	},
 	settingsTitle: {
-		color: theme.colors.primary,
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
 	},
 	settingItem: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingVertical: theme.spacing.md,
+		paddingVertical: 16,
 	},
 	settingText: {
 		flex: 1,
 	},
 	settingDescription: {
-		color: theme.colors.outline,
-		marginTop: theme.spacing.xs,
+		marginTop: 4,
 	},
 	preferenceTags: {
 		flexDirection: "row",
 		flexWrap: "wrap",
-		gap: theme.spacing.sm,
-		marginTop: theme.spacing.sm,
+		gap: 8,
+		marginTop: 8,
 	},
 	divider: {
-		marginVertical: theme.spacing.sm,
+		marginVertical: 8,
 	},
 	actionsCard: {
-		margin: theme.spacing.md,
+		margin: 16,
 		marginTop: 0,
-		marginBottom: theme.spacing.xl,
+		marginBottom: 32,
 	},
 	actionButton: {
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
 	},
 	signOutButton: {
-		marginTop: theme.spacing.md,
+		marginTop: 16,
 	},
 });

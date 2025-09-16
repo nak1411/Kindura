@@ -3,9 +3,11 @@ import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import { Text, Card, Button, Surface } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../services/supabase";
-import { theme } from "../../constants/theme";
+import { useTheme } from "../../constants/theme-context";
 
 export default function DebugScreen({ navigation }: any) {
+	const { theme } = useTheme();
+
 	const wipeAllData = async () => {
 		Alert.alert(
 			"Wipe All Data",
@@ -170,116 +172,28 @@ export default function DebugScreen({ navigation }: any) {
 								.eq("id", user.id);
 
 							if (profileError) {
-								console.error(
-									"❌ Failed to delete user profile:",
-									profileError
-								);
-								throw new Error(
-									`Failed to delete profile: ${profileError.message}`
-								);
+								console.error("❌ Failed to delete profile:", profileError);
+								throw profileError;
+							} else {
+								console.log("✅ User profile deleted");
 							}
-							console.log("✅ User profile deleted");
 
 							// Step 4: Clear local storage
 							console.log("🔄 Clearing local storage...");
 							await AsyncStorage.clear();
-							console.log("✅ Local storage cleared");
 
-							// Step 5: Delete auth user using direct SQL
-							console.log("🔄 Attempting to delete auth record...");
-							try {
-								const { error: authDeleteError } = await supabase.rpc(
-									"delete_auth_user",
-									{
-										user_id: user.id,
-									}
-								);
-
-								if (authDeleteError) {
-									console.warn(
-										"⚠️ Auth deletion failed via RPC:",
-										authDeleteError
-									);
-									throw authDeleteError;
-								}
-
-								console.log("✅ Auth user deleted successfully");
-
-								// Show complete success message
-								Alert.alert(
-									"Account Completely Deleted",
-									"Your account has been permanently and completely removed from our system, including all login credentials.",
-									[
-										{
-											text: "OK",
-											onPress: () => {
-												console.log("✅ Complete account deletion successful");
-											},
-										},
-									]
-								);
-							} catch (authError) {
-								console.warn("⚠️ Could not delete auth record:", authError);
-
-								// Sign out even if auth deletion failed
-								await supabase.auth.signOut();
-
-								// Show instructions for manual deletion
-								Alert.alert(
-									"Account Data Deleted",
-									"Your profile and app data have been permanently deleted.\n\nAuth record deletion failed. Please:\n1. Contact support for complete removal\n2. Or manually delete from Supabase Dashboard\n\nYou have been signed out.",
-									[
-										{
-											text: "OK",
-											onPress: () => {
-												console.log("✅ Partial account deletion completed");
-											},
-										},
-									]
-								);
-							}
-						} catch (error: any) {
-							console.error("❌ Error during account deletion:", error);
-
-							// Even if there were errors, still sign out for safety
-							try {
-								await supabase.auth.signOut();
-								await AsyncStorage.clear();
-							} catch (signOutError) {
-								console.error("❌ Failed to sign out:", signOutError);
-							}
+							// Step 5: Sign out (this will redirect to auth screen)
+							console.log("🔄 Signing out...");
+							await supabase.auth.signOut();
 
 							Alert.alert(
-								"Deletion Error",
-								`There was an issue deleting your account: ${
-									error.message || "Unknown error"
-								}. You have been signed out for security. Some data may remain - please contact support if needed.`
+								"Account Deleted",
+								"Your account has been permanently deleted. You can now sign up again."
 							);
-						}
-					},
-				},
-			]
-		);
-	};
-
-	// Enhanced development-only function for complete cleanup
-	const devCompleteWipe = async () => {
-		if (!__DEV__) return;
-
-		Alert.alert(
-			"🧹 DEV: Complete System Wipe",
-			"This development function will:\n• Delete ALL user data\n• Clear local storage\n• Sign out\n• Reset app state\n\nOnly use for testing!",
-			[
-				{ text: "Cancel", style: "cancel" },
-				{
-					text: "DEV WIPE ALL",
-					style: "destructive",
-					onPress: async () => {
-						try {
-							await deleteUserAccountPermanently();
 						} catch (error) {
-							console.error("Dev wipe error:", error);
-							await AsyncStorage.clear();
+							console.error("❌ Error wiping data:", error);
+							Alert.alert("Error", "Failed to wipe all data, but signed out.");
+							// Still sign out even if other operations failed
 							await supabase.auth.signOut();
 						}
 					},
@@ -288,95 +202,144 @@ export default function DebugScreen({ navigation }: any) {
 		);
 	};
 
+	const styles = StyleSheet.create({
+		container: {
+			flex: 1,
+			backgroundColor: theme.colors.background,
+			padding: theme.spacing.md,
+		},
+		surface: {
+			backgroundColor: theme.colors.surface,
+			padding: theme.spacing.lg,
+			borderRadius: 16,
+		},
+		title: {
+			textAlign: "center",
+			marginBottom: theme.spacing.sm,
+			color: theme.colors.primary,
+		},
+		subtitle: {
+			textAlign: "center",
+			marginBottom: theme.spacing.xl,
+			color: theme.colors.outline,
+		},
+		section: {
+			marginBottom: theme.spacing.lg,
+		},
+		sectionTitle: {
+			marginBottom: theme.spacing.md,
+			color: theme.colors.primary,
+		},
+		dangerTitle: {
+			marginBottom: theme.spacing.md,
+			color: theme.colors.error,
+		},
+		warningText: {
+			marginTop: theme.spacing.sm,
+			color: theme.colors.outline,
+			fontStyle: "italic",
+			textAlign: "center",
+		},
+		button: {
+			marginBottom: theme.spacing.md,
+		},
+	});
+
 	return (
 		<ScrollView style={styles.container}>
 			<Surface style={styles.surface}>
 				<Text variant="headlineMedium" style={styles.title}>
-					🛠️ Debug Tools
+					Debug & Development
 				</Text>
 				<Text variant="bodyMedium" style={styles.subtitle}>
-					Development utilities for testing
+					Tools for testing and troubleshooting
 				</Text>
 
-				<Card style={styles.section}>
+				<View style={styles.section}>
+					<Text variant="titleLarge" style={styles.sectionTitle}>
+						Storage Management
+					</Text>
+
+					<Button
+						mode="outlined"
+						onPress={showStorageData}
+						style={styles.button}
+						icon="database-eye"
+					>
+						View Storage Data
+					</Button>
+
+					<Button
+						mode="outlined"
+						onPress={clearAsyncStorage}
+						style={styles.button}
+						icon="delete-sweep"
+					>
+						Clear AsyncStorage
+					</Button>
+				</View>
+
+				<View style={styles.section}>
+					<Text variant="titleLarge" style={styles.sectionTitle}>
+						Profile Management
+					</Text>
+
+					<Button
+						mode="outlined"
+						onPress={resetUserProfile}
+						style={styles.button}
+						icon="account-refresh"
+					>
+						Reset User Profile
+					</Button>
+				</View>
+
+				<View style={styles.section}>
+					<Text variant="titleLarge" style={styles.dangerTitle}>
+						⚠️ Danger Zone
+					</Text>
+
+					<Button
+						mode="outlined"
+						onPress={wipeAllData}
+						style={styles.button}
+						icon="nuke"
+						buttonColor={theme.colors.errorContainer}
+						textColor={theme.colors.error}
+					>
+						Wipe All Local Data
+					</Button>
+
+					<Button
+						mode="contained"
+						onPress={deleteUserAccountPermanently}
+						style={styles.button}
+						icon="account-remove"
+						buttonColor={theme.colors.error}
+						textColor={theme.colors.onError}
+					>
+						DELETE ACCOUNT FOREVER
+					</Button>
+
+					<Text variant="bodySmall" style={styles.warningText}>
+						⚠️ Permanent deletion cannot be undone. Login credentials remain
+						active unless you contact support.
+					</Text>
+				</View>
+
+				<Card
+					style={{
+						backgroundColor: theme.colors.surfaceVariant,
+						marginBottom: theme.spacing.lg,
+					}}
+				>
 					<Card.Content>
-						<Text variant="titleMedium" style={styles.sectionTitle}>
-							Data Management
-						</Text>
-
-						<Button
-							mode="contained"
-							onPress={wipeAllData}
-							style={styles.button}
-							buttonColor="#f44336"
-							icon="delete-sweep"
+						<Text
+							variant="bodySmall"
+							style={{ color: theme.colors.onSurfaceVariant }}
 						>
-							Wipe All Data & Sign Out
-						</Button>
-
-						<Button
-							mode="outlined"
-							onPress={resetUserProfile}
-							style={styles.button}
-							icon="account-refresh"
-						>
-							Reset User Profile
-						</Button>
-
-						<Button
-							mode="outlined"
-							onPress={clearAsyncStorage}
-							style={styles.button}
-							icon="database-remove"
-						>
-							Clear Local Storage Only
-						</Button>
-
-						<Button
-							mode="text"
-							onPress={showStorageData}
-							style={styles.button}
-							icon="database-eye"
-						>
-							Show Storage Data (Console)
-						</Button>
-
-						{/* Development only - complete wipe */}
-						{__DEV__ && (
-							<Button
-								mode="outlined"
-								onPress={devCompleteWipe}
-								style={styles.button}
-								buttonColor="#ffebee"
-								textColor="#d32f2f"
-								icon="nuke"
-							>
-								🧹 DEV: Complete System Wipe
-							</Button>
-						)}
-					</Card.Content>
-				</Card>
-
-				<Card style={styles.section}>
-					<Card.Content>
-						<Text variant="titleMedium" style={styles.dangerTitle}>
-							⚠️ Danger Zone
-						</Text>
-
-						<Button
-							mode="contained"
-							onPress={deleteUserAccountPermanently}
-							style={styles.button}
-							buttonColor="#d32f2f"
-							icon="account-remove"
-						>
-							Delete Account Permanently
-						</Button>
-
-						<Text variant="bodySmall" style={styles.warningText}>
-							This will permanently delete your account data from the app
-							database. Login credentials remain active unless you contact
-							support.
+							💡 This debug screen is only visible in development mode. Login
+							credentials remain active unless you contact support.
 						</Text>
 					</Card.Content>
 				</Card>
@@ -393,45 +356,3 @@ export default function DebugScreen({ navigation }: any) {
 		</ScrollView>
 	);
 }
-
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: theme.colors.background,
-		padding: theme.spacing.md,
-	},
-	surface: {
-		padding: theme.spacing.lg,
-		borderRadius: 16,
-	},
-	title: {
-		textAlign: "center",
-		marginBottom: theme.spacing.sm,
-		color: theme.colors.primary,
-	},
-	subtitle: {
-		textAlign: "center",
-		marginBottom: theme.spacing.xl,
-		color: theme.colors.outline,
-	},
-	section: {
-		marginBottom: theme.spacing.lg,
-	},
-	sectionTitle: {
-		marginBottom: theme.spacing.md,
-		color: theme.colors.primary,
-	},
-	dangerTitle: {
-		marginBottom: theme.spacing.md,
-		color: theme.colors.error,
-	},
-	warningText: {
-		marginTop: theme.spacing.sm,
-		color: theme.colors.outline,
-		fontStyle: "italic",
-		textAlign: "center",
-	},
-	button: {
-		marginBottom: theme.spacing.md,
-	},
-});

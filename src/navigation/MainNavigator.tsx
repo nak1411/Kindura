@@ -6,10 +6,13 @@ import RoomsNavigator from "./RoomsNavigator";
 import MapScreen from "../screens/map/MapScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import DebugScreen from "../screens/debug/DebugScreen";
+import { useTheme } from "../constants/theme-context";
 
 const Tab = createBottomTabNavigator();
 
 export default function MainNavigator() {
+	const { theme } = useTheme();
+
 	return (
 		<Tab.Navigator
 			screenOptions={({ route }) => ({
@@ -36,8 +39,12 @@ export default function MainNavigator() {
 						/>
 					);
 				},
-				tabBarActiveTintColor: "#6B73FF",
-				tabBarInactiveTintColor: "gray",
+				tabBarActiveTintColor: theme.colors.primary,
+				tabBarInactiveTintColor: theme.colors.outline,
+				tabBarStyle: {
+					backgroundColor: theme.colors.surface,
+					borderTopColor: theme.colors.outline,
+				},
 				headerShown: false, // Let individual navigators handle their own headers
 			})}
 		>
