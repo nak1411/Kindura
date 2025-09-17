@@ -289,7 +289,7 @@ export default function DebugScreen({ navigation }: any) {
 						mode="outlined"
 						onPress={resetUserProfile}
 						style={styles.button}
-						icon="account-refresh"
+						icon="account-reactivate"
 					>
 						Reset User Profile
 					</Button>
