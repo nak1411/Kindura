@@ -17,7 +17,7 @@ export default function RoomsNavigator() {
 		<Stack.Navigator
 			screenOptions={{
 				headerShown: false, // Both screens handle their own headers
-				gestureEnabled: true,
+				gestureEnabled: false, // Disable all gestures globally
 			}}
 		>
 			<Stack.Screen
@@ -25,6 +25,7 @@ export default function RoomsNavigator() {
 				component={RoomsScreen}
 				options={{
 					headerShown: false,
+					gestureEnabled: true, // Enable gestures only for the rooms list
 				}}
 			/>
 			<Stack.Screen
@@ -33,6 +34,7 @@ export default function RoomsNavigator() {
 				options={{
 					headerShown: false,
 					presentation: "modal", // Makes it feel more immersive
+					gestureEnabled: false, // Explicitly disable gestures for room detail
 					cardStyleInterpolator: ({ current, layouts }) => {
 						return {
 							cardStyle: {
