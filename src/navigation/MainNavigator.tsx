@@ -1,6 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import DashboardScreen from "../screens/dashboard/DashboardScreen";
 import QuestFeedScreen from "../screens/quests/QuestFeedScreen";
 import RoomsNavigator from "./RoomsNavigator";
 import MapScreen from "../screens/map/MapScreen";
@@ -15,11 +16,14 @@ export default function MainNavigator() {
 
 	return (
 		<Tab.Navigator
+			initialRouteName="Dashboard"
 			screenOptions={({ route }) => ({
 				tabBarIcon: ({ focused, color, size }) => {
 					let iconName: string;
 
-					if (route.name === "Quests") {
+					if (route.name === "Dashboard") {
+						iconName = focused ? "view-dashboard" : "view-dashboard-outline";
+					} else if (route.name === "Quests") {
 						iconName = focused ? "compass" : "compass-outline";
 					} else if (route.name === "Rooms") {
 						iconName = focused ? "account-group" : "account-group-outline";
@@ -48,6 +52,7 @@ export default function MainNavigator() {
 				headerShown: false, // Let individual navigators handle their own headers
 			})}
 		>
+			<Tab.Screen name="Dashboard" component={DashboardScreen} />
 			<Tab.Screen name="Quests" component={QuestFeedScreen} />
 			<Tab.Screen name="Rooms" component={RoomsNavigator} />
 			<Tab.Screen name="Map" component={MapScreen} />
