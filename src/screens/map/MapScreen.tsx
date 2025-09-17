@@ -18,6 +18,7 @@ export default function MapScreen() {
 			backgroundColor: theme.colors.surface,
 			width: "100%",
 			maxWidth: 400,
+			borderRadius: 8,
 		},
 		title: {
 			color: theme.colors.primary,
@@ -42,11 +43,11 @@ export default function MapScreen() {
 			<Card style={styles.card}>
 				<Card.Content>
 					<Text variant="headlineMedium" style={styles.title}>
-						🗺️ Gentle Connections Map
+						🗺️ Connections Map
 					</Text>
 
 					<Text variant="bodyLarge" style={styles.description}>
-						Discover nearby gentle souls and peaceful places in your community.
+						Discover nearby users and places in your community.
 					</Text>
 
 					<Text variant="bodyMedium" style={styles.comingSoonText}>
@@ -84,7 +85,7 @@ export default function MapScreen() {
 						mode="outlined"
 						onPress={() => {}}
 						disabled
-						style={{ marginTop: theme.spacing.md }}
+						style={{ marginTop: theme.spacing.md, borderRadius: 8 }}
 					>
 						Coming Soon
 					</Button>

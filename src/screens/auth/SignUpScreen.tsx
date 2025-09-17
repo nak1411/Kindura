@@ -85,7 +85,7 @@ export default function SignUpScreen({ navigation }: any) {
 					Join Kindura
 				</Text>
 				<Text variant="bodyMedium" style={styles.subtitle}>
-					Create your account for gentle connections
+					Create your account for connections
 				</Text>
 
 				<TextInput

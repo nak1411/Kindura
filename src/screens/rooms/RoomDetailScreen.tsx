@@ -45,7 +45,7 @@ interface RoomMessage {
 	room_id: string;
 	user_id: string;
 	content: string;
-	message_type: "text" | "gentle_nudge" | "system";
+	message_type: "text" | "nudge" | "system";
 	created_at: string;
 	timestamp?: string; // For backward compatibility
 	user_name?: string;
@@ -138,6 +138,7 @@ export default function RoomDetailScreen({
 		participantsCard: {
 			backgroundColor: theme.colors.surface,
 			marginBottom: 8,
+			borderRadius: 8,
 		},
 		sectionTitle: {
 			color: theme.colors.primary,
@@ -472,7 +473,12 @@ export default function RoomDetailScreen({
 							Present for {formatPresenceTime(presenceTimer)}
 						</Text>
 					</View>
-					<Button mode="outlined" onPress={handleLeaveRoom} compact>
+					<Button
+						mode="outlined"
+						onPress={handleLeaveRoom}
+						compact
+						style={{ borderRadius: 8 }}
+					>
 						Leave
 					</Button>
 				</View>
@@ -489,7 +495,7 @@ export default function RoomDetailScreen({
 					<Card style={styles.participantsCard}>
 						<Card.Content>
 							<Text variant="titleSmall" style={styles.sectionTitle}>
-								Present ({participants.length})
+								Users ({participants.length})
 							</Text>
 							<View style={styles.participantsList}>
 								{participants.map((participant) => (
@@ -510,7 +516,7 @@ export default function RoomDetailScreen({
 			<Surface style={styles.messagesContainer}>
 				<View style={styles.messagesHeader}>
 					<Text variant="titleSmall" style={styles.sectionTitle}>
-						Gentle Messages
+						Chat
 					</Text>
 				</View>
 
@@ -532,8 +538,7 @@ export default function RoomDetailScreen({
 							iconColor={theme.colors.outline}
 						/>
 						<Text style={styles.emptyText}>
-							No messages yet.{"\n"}Send a gentle message to connect with
-							others.
+							No messages yet.{"\n"}Send a message to connect with others.
 						</Text>
 					</View>
 				)}
@@ -543,7 +548,7 @@ export default function RoomDetailScreen({
 					<TextInput
 						value={newMessage}
 						onChangeText={setNewMessage}
-						placeholder="Send a gentle message..."
+						placeholder="Send a message..."
 						style={styles.messageInput}
 						multiline
 						right={

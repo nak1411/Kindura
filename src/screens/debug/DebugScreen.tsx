@@ -211,7 +211,7 @@ export default function DebugScreen({ navigation }: any) {
 		surface: {
 			backgroundColor: theme.colors.surface,
 			padding: theme.spacing.lg,
-			borderRadius: 16,
+			borderRadius: 8,
 		},
 		title: {
 			textAlign: "center",
@@ -242,6 +242,7 @@ export default function DebugScreen({ navigation }: any) {
 		},
 		button: {
 			marginBottom: theme.spacing.md,
+			borderRadius: 8,
 		},
 	});
 
@@ -331,6 +332,7 @@ export default function DebugScreen({ navigation }: any) {
 					style={{
 						backgroundColor: theme.colors.surfaceVariant,
 						marginBottom: theme.spacing.lg,
+						borderRadius: 8,
 					}}
 				>
 					<Card.Content>

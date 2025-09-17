@@ -26,7 +26,7 @@ type Profile = {
 	location_sharing?: boolean;
 	quests_completed?: number;
 	rooms_participated?: number;
-	gentle_nudges_sent?: number;
+	nudges_sent?: number;
 };
 
 export default function ProfileScreen() {
@@ -143,7 +143,7 @@ export default function ProfileScreen() {
 							variant="titleMedium"
 							style={[styles.badgeText, { color: theme.colors.primary }]}
 						>
-							Gentle Soul
+							New User
 						</Text>
 						<Text
 							variant="bodyMedium"
@@ -209,13 +209,13 @@ export default function ProfileScreen() {
 								variant="headlineMedium"
 								style={[styles.statNumber, { color: theme.colors.primary }]}
 							>
-								{profile.gentle_nudges_sent || 0}
+								{profile.nudges_sent || 0}
 							</Text>
 							<Text
 								variant="bodySmall"
 								style={[styles.statLabel, { color: theme.colors.outline }]}
 							>
-								Gentle{"\n"}Nudges
+								Nudges
 							</Text>
 						</View>
 					</View>
@@ -254,7 +254,7 @@ export default function ProfileScreen() {
 									{ color: theme.colors.outline },
 								]}
 							>
-								Receive gentle reminders and updates
+								Receive reminders and updates
 							</Text>
 						</View>
 						<Switch
@@ -283,7 +283,7 @@ export default function ProfileScreen() {
 									{ color: theme.colors.outline },
 								]}
 							>
-								Help find nearby gentle souls
+								Help find nearby users
 							</Text>
 						</View>
 						<Switch
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		padding: 24,
 		margin: 16,
-		borderRadius: 16,
+		borderRadius: 8,
 	},
 	avatar: {
 		marginBottom: 16,
@@ -411,6 +411,7 @@ const styles = StyleSheet.create({
 	statsCard: {
 		margin: 16,
 		marginTop: 0,
+		borderRadius: 8,
 	},
 	statsTitle: {
 		marginBottom: 16,
@@ -433,6 +434,7 @@ const styles = StyleSheet.create({
 	settingsCard: {
 		margin: 16,
 		marginTop: 0,
+		borderRadius: 8,
 	},
 	settingsTitle: {
 		marginBottom: 16,
@@ -462,9 +464,11 @@ const styles = StyleSheet.create({
 		margin: 16,
 		marginTop: 0,
 		marginBottom: 32,
+		borderRadius: 8,
 	},
 	actionButton: {
 		marginBottom: 16,
+		borderRadius: 8,
 	},
 	signOutButton: {
 		marginTop: 16,

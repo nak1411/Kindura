@@ -185,7 +185,7 @@ export default function OnboardingScreen({
 
 				<View style={styles.section}>
 					<Text variant="titleMedium" style={styles.sectionTitle}>
-						Topics to Keep Gentle
+						Topics
 					</Text>
 					<Text variant="bodySmall" style={styles.sectionDescription}>
 						Select topics you'd prefer to avoid in conversations

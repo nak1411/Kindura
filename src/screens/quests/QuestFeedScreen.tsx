@@ -49,7 +49,7 @@ export default function QuestFeedScreen() {
 		const mockQuests: Quest[] = [
 			{
 				id: "1",
-				title: "Gentle Morning Reflection",
+				title: "Morning Reflection",
 				description: "Share your intentions for the day with a caring soul",
 				duration_minutes: 15,
 				max_participants: 2,
@@ -187,6 +187,7 @@ export default function QuestFeedScreen() {
 		questCard: {
 			marginBottom: theme.spacing.md,
 			elevation: 2,
+			borderRadius: 4,
 		},
 		questHeader: {
 			flexDirection: "row",
@@ -247,6 +248,7 @@ export default function QuestFeedScreen() {
 			bottom: theme.spacing.md,
 			right: theme.spacing.md,
 			backgroundColor: theme.colors.primary,
+			borderRadius: 8,
 		},
 	});
 
@@ -256,7 +258,7 @@ export default function QuestFeedScreen() {
 				Available Quests
 			</Text>
 			<Text variant="bodyMedium" style={styles.subheader}>
-				Choose a gentle adventure to share with someone
+				Choose an adventure to share with someone
 			</Text>
 
 			<FlatList

@@ -355,7 +355,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 											navigation.navigate("RoomDetail", { roomId: item.id })
 										}
 										compact
-										style={{ marginRight: 8 }}
+										style={{ marginRight: 8, borderRadius: 8 }}
 									>
 										Continue
 									</Button>
@@ -363,6 +363,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 										mode="outlined"
 										onPress={() => leaveRoom(item.id)}
 										compact
+										style={{ borderRadius: 8 }}
 									>
 										Leave
 									</Button>
@@ -372,6 +373,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 									mode="outlined"
 									onPress={() => joinRoom(item.id)}
 									compact
+									style={{ borderRadius: 8 }}
 									disabled={
 										item.current_participants.length >= item.max_capacity
 									}
@@ -415,6 +417,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		roomCard: {
 			marginBottom: 16,
 			elevation: 2,
+			borderRadius: 4,
 		},
 		activeRoomCard: {
 			borderWidth: 2,
@@ -432,7 +435,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		occupancyInfo: {
 			paddingHorizontal: 8,
 			paddingVertical: 4,
-			borderRadius: 12,
+			borderRadius: 8,
 		},
 		occupancyText: {
 			fontSize: 12,
@@ -464,6 +467,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 			right: 0,
 			bottom: 0,
 			backgroundColor: theme.colors.primary,
+			borderRadius: 8,
 		},
 		modal: {
 			margin: 20,
@@ -471,7 +475,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		modalContent: {
 			backgroundColor: theme.colors.surface,
 			padding: 20,
-			borderRadius: 16,
+			borderRadius: 8,
 		},
 		modalTitle: {
 			color: theme.colors.primary,

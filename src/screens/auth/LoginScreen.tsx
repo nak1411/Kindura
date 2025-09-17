@@ -29,7 +29,7 @@ export default function LoginScreen({ navigation }: any) {
 					Welcome to Kindura
 				</Text>
 				<Text variant="bodyMedium" style={styles.subtitle}>
-					Gentle connections, meaningful moments
+					Connections, meaningful moments
 				</Text>
 
 				<TextInput

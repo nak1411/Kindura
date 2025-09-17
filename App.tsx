@@ -97,7 +97,7 @@ const AppContent: React.FC = () => {
 		setTimeout(() => {
 			Alert.alert(
 				"Welcome to Kindura! ✨",
-				"Your profile has been set up. Enjoy your journey of gentle connections!"
+				"Your profile has been set up. Enjoy your journey of connections!"
 			);
 		}, 500);
 	};
