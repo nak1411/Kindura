@@ -1,3 +1,4 @@
+// src/types/index.ts - Updated User interface with location_sharing
 export interface User {
   id: string;
   email: string;
@@ -14,6 +15,7 @@ export interface User {
   bio?: string;
   location_lat?: number;
   location_lng?: number;
+  location_sharing?: boolean;
   last_active: string;
   created_at: string;
   updated_at: string;
