@@ -535,7 +535,7 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 			{/* Header */}
 			<Surface style={styles.header}>
 				<Text variant="headlineMedium" style={styles.title}>
-					Parallel Rooms
+					Rooms
 				</Text>
 				<Text variant="bodyMedium" style={styles.subtitle}>
 					Share focused time with others

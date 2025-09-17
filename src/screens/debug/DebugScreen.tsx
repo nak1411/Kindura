@@ -172,28 +172,116 @@ export default function DebugScreen({ navigation }: any) {
 								.eq("id", user.id);
 
 							if (profileError) {
-								console.error("❌ Failed to delete profile:", profileError);
-								throw profileError;
-							} else {
-								console.log("✅ User profile deleted");
+								console.error(
+									"❌ Failed to delete user profile:",
+									profileError
+								);
+								throw new Error(
+									`Failed to delete profile: ${profileError.message}`
+								);
 							}
+							console.log("✅ User profile deleted");
 
 							// Step 4: Clear local storage
 							console.log("🔄 Clearing local storage...");
 							await AsyncStorage.clear();
+							console.log("✅ Local storage cleared");
 
-							// Step 5: Sign out (this will redirect to auth screen)
-							console.log("🔄 Signing out...");
-							await supabase.auth.signOut();
+							// Step 5: Delete auth user using direct SQL
+							console.log("🔄 Attempting to delete auth record...");
+							try {
+								const { error: authDeleteError } = await supabase.rpc(
+									"delete_auth_user",
+									{
+										user_id: user.id,
+									}
+								);
+
+								if (authDeleteError) {
+									console.warn(
+										"⚠️ Auth deletion failed via RPC:",
+										authDeleteError
+									);
+									throw authDeleteError;
+								}
+
+								console.log("✅ Auth user deleted successfully");
+
+								// Show complete success message
+								Alert.alert(
+									"Account Completely Deleted",
+									"Your account has been permanently and completely removed from our system, including all login credentials.",
+									[
+										{
+											text: "OK",
+											onPress: () => {
+												console.log("✅ Complete account deletion successful");
+											},
+										},
+									]
+								);
+							} catch (authError) {
+								console.warn("⚠️ Could not delete auth record:", authError);
+
+								// Sign out even if auth deletion failed
+								await supabase.auth.signOut();
+
+								// Show instructions for manual deletion
+								Alert.alert(
+									"Account Data Deleted",
+									"Your profile and app data have been permanently deleted.\n\nAuth record deletion failed. Please:\n1. Contact support for complete removal\n2. Or manually delete from Supabase Dashboard\n\nYou have been signed out.",
+									[
+										{
+											text: "OK",
+											onPress: () => {
+												console.log("✅ Partial account deletion completed");
+											},
+										},
+									]
+								);
+							}
+						} catch (error: any) {
+							console.error("❌ Error during account deletion:", error);
+
+							// Even if there were errors, still sign out for safety
+							try {
+								await supabase.auth.signOut();
+								await AsyncStorage.clear();
+							} catch (signOutError) {
+								console.error("❌ Failed to sign out:", signOutError);
+							}
 
 							Alert.alert(
-								"Account Deleted",
-								"Your account has been permanently deleted. You can now sign up again."
+								"Deletion Error",
+								`There was an issue deleting your account: ${
+									error.message || "Unknown error"
+								}. You have been signed out for security. Some data may remain - please contact support if needed.`
 							);
+						}
+					},
+				},
+			]
+		);
+	};
+
+	// Enhanced development-only function for complete cleanup
+	const devCompleteWipe = async () => {
+		if (!__DEV__) return;
+
+		Alert.alert(
+			"🧹 DEV: Complete System Wipe",
+			"This development function will:\n• Delete ALL user data\n• Clear local storage\n• Sign out\n• Reset app state\n\nOnly use for testing!",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "DEV WIPE ALL",
+					style: "destructive",
+					onPress: async () => {
+						try {
+							await deleteUserAccountPermanently();
 						} catch (error) {
-							console.error("❌ Error wiping data:", error);
-							Alert.alert("Error", "Failed to wipe all data, but signed out.");
-							// Still sign out even if other operations failed
+							console.error("Dev wipe error:", error);
+							await AsyncStorage.clear();
 							await supabase.auth.signOut();
 						}
 					},
@@ -302,49 +390,19 @@ export default function DebugScreen({ navigation }: any) {
 
 					<Button
 						mode="outlined"
-						onPress={wipeAllData}
+						onPress={devCompleteWipe}
 						style={styles.button}
 						icon="nuke"
 						buttonColor={theme.colors.errorContainer}
 						textColor={theme.colors.error}
 					>
-						Wipe All Local Data
-					</Button>
-
-					<Button
-						mode="contained"
-						onPress={deleteUserAccountPermanently}
-						style={styles.button}
-						icon="account-remove"
-						buttonColor={theme.colors.error}
-						textColor={theme.colors.onError}
-					>
-						DELETE ACCOUNT FOREVER
+						Nuke All User Data
 					</Button>
 
 					<Text variant="bodySmall" style={styles.warningText}>
-						⚠️ Permanent deletion cannot be undone. Login credentials remain
-						active unless you contact support.
+						⚠️ Permanent deletion cannot be undone.
 					</Text>
 				</View>
-
-				<Card
-					style={{
-						backgroundColor: theme.colors.surfaceVariant,
-						marginBottom: theme.spacing.lg,
-						borderRadius: 8,
-					}}
-				>
-					<Card.Content>
-						<Text
-							variant="bodySmall"
-							style={{ color: theme.colors.onSurfaceVariant }}
-						>
-							💡 This debug screen is only visible in development mode. Login
-							credentials remain active unless you contact support.
-						</Text>
-					</Card.Content>
-				</Card>
 
 				<Button
 					mode="outlined"
