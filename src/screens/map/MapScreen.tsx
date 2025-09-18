@@ -5,6 +5,7 @@ import {
 	Alert,
 	Dimensions,
 	TouchableOpacity,
+	ScrollView,
 } from "react-native";
 import {
 	Text,
@@ -49,6 +50,11 @@ export default function MapScreen() {
 	const [tempLocationSharing, setTempLocationSharing] = useState(false);
 	const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
 	const [radiusInMiles, setRadiusInMiles] = useState(3); // Default 3 miles
+
+	// New states for user list functionality
+	const [showUsersModal, setShowUsersModal] = useState(false);
+	const [nearbyUsersList, setNearbyUsersList] = useState<any[]>([]);
+	const [loadingUsers, setLoadingUsers] = useState(false);
 
 	const [mapRegion, setMapRegion] = useState<Region>({
 		latitude: 37.78825,
@@ -311,6 +317,81 @@ export default function MapScreen() {
 		return userDensity[0]?.user_count || 0;
 	};
 
+	// NEW: Load detailed users list
+	const loadNearbyUsersList = async () => {
+		if (!currentLocation || !user?.location_sharing || loadingUsers) return;
+
+		try {
+			setLoadingUsers(true);
+			// Convert miles to kilometers (1 mile = 1.60934 km)
+			const radiusInKm = radiusInMiles * 1.60934;
+
+			const { data, error } = await supabase
+				.from("users")
+				.select("id, display_name, location_lat, location_lng, last_active")
+				.eq("location_sharing", true)
+				.neq("id", user.id)
+				.not("location_lat", "is", null)
+				.not("location_lng", "is", null)
+				.gte(
+					"last_active",
+					new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+				);
+
+			if (error) throw error;
+
+			// Filter users within radius and add distance
+			const usersInRadius =
+				data
+					?.map((u) => {
+						const distance = calculateDistance(
+							currentLocation.coords.latitude,
+							currentLocation.coords.longitude,
+							u.location_lat,
+							u.location_lng
+						);
+						return {
+							...u,
+							distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
+						};
+					})
+					.filter((u) => u.distance <= radiusInKm) || [];
+
+			// Sort by distance (closest first)
+			usersInRadius.sort((a, b) => a.distance - b.distance);
+
+			// Add test users in development if no real users
+			if (__DEV__ && usersInRadius.length === 0) {
+				const testUsers = [];
+				const testCount = Math.min(Math.floor(radiusInMiles / 5) + 2, 20);
+				for (let i = 0; i < testCount; i++) {
+					testUsers.push({
+						id: `test-${i}`,
+						display_name: `Kindura User ${i + 1}`,
+						distance: Math.round(Math.random() * radiusInKm * 100) / 100,
+						last_active: new Date().toISOString(),
+						location_lat: 0,
+						location_lng: 0,
+					});
+				}
+				testUsers.sort((a, b) => a.distance - b.distance);
+				setNearbyUsersList(testUsers);
+			} else {
+				setNearbyUsersList(usersInRadius);
+			}
+		} catch (error) {
+			console.error("Error loading nearby users list:", error);
+		} finally {
+			setLoadingUsers(false);
+		}
+	};
+
+	// NEW: Handle total users indicator press
+	const handleTotalUsersPress = async () => {
+		await loadNearbyUsersList();
+		setShowUsersModal(true);
+	};
+
 	// Styles
 	const styles = StyleSheet.create({
 		container: {
@@ -353,9 +434,20 @@ export default function MapScreen() {
 		},
 		debugFab: {
 			position: "absolute",
-			right: 16,
-			bottom: 205,
+			left: 16,
+			bottom: 160,
 			backgroundColor: theme.colors.error,
+		},
+		totalUsersCard: {
+			backgroundColor: theme.colors.primaryContainer,
+			paddingHorizontal: 12,
+			paddingVertical: 8,
+			borderRadius: 12,
+			elevation: 6,
+			shadowColor: "#000",
+			shadowOffset: { width: 0, height: 2 },
+			shadowOpacity: 0.2,
+			shadowRadius: 3,
 		},
 		modalContent: {
 			backgroundColor: theme.colors.surface,
@@ -363,21 +455,62 @@ export default function MapScreen() {
 			margin: 20,
 			borderRadius: 8,
 		},
+		modalHeader: {
+			flexDirection: "row",
+			alignItems: "center",
+			justifyContent: "space-between",
+			marginBottom: 20,
+		},
+		modalSubtext: {
+			color: theme.colors.outline,
+			marginBottom: 16,
+		},
+		usersList: {
+			maxHeight: 400,
+		},
+		userCard: {
+			marginBottom: 8,
+			backgroundColor: theme.colors.surfaceVariant,
+		},
+		userCardContent: {
+			paddingVertical: 12,
+		},
+		userRow: {
+			flexDirection: "row",
+			justifyContent: "space-between",
+			alignItems: "center",
+		},
+		userInfo: {
+			flex: 1,
+		},
+		userName: {
+			fontWeight: "500",
+		},
+		userDistance: {
+			color: theme.colors.outline,
+		},
+		userActivity: {
+			alignItems: "flex-end",
+		},
+		userActiveDate: {
+			color: theme.colors.outline,
+		},
+		loadingContainer: {
+			padding: 20,
+			alignItems: "center",
+		},
+		emptyContainer: {
+			padding: 20,
+			alignItems: "center",
+		},
+		emptyText: {
+			color: theme.colors.outline,
+		},
 		settingRow: {
 			flexDirection: "row",
 			justifyContent: "space-between",
 			alignItems: "center",
 			paddingVertical: 12,
-		},
-		totalUsersCard: {
-			position: "absolute",
-			top: 50,
-			left: 20,
-			backgroundColor: theme.colors.primaryContainer,
-			paddingHorizontal: 12,
-			paddingVertical: 8,
-			borderRadius: 16,
-			zIndex: 1000,
 		},
 		radiusInfo: {
 			flexDirection: "row",
@@ -421,7 +554,7 @@ export default function MapScreen() {
 		},
 	});
 
-	// Render conditions
+	// Loading state
 	if (loading) {
 		return (
 			<View style={styles.container}>
@@ -442,6 +575,7 @@ export default function MapScreen() {
 		);
 	}
 
+	// Permission not granted state
 	if (!permissionGranted) {
 		return (
 			<View style={styles.container}>
@@ -513,20 +647,30 @@ export default function MapScreen() {
 				)}
 			</MapView>
 
-			{/* Total Users Indicator */}
+			{/* Total Users Indicator - NOW CLICKABLE */}
 			{getTotalUsers() > 0 && (
-				<Surface style={styles.totalUsersCard}>
-					<Text
-						variant="labelMedium"
-						style={{
-							color: theme.colors.onPrimaryContainer,
-							fontWeight: "bold",
-						}}
-					>
-						{getTotalUsers()} users within {radiusInMiles} mile
-						{radiusInMiles !== 1 ? "s" : ""}
-					</Text>
-				</Surface>
+				<TouchableOpacity
+					onPress={handleTotalUsersPress}
+					style={{
+						position: "absolute",
+						top: 50,
+						left: 16,
+						zIndex: 9999,
+					}}
+				>
+					<Surface style={styles.totalUsersCard}>
+						<Text
+							variant="labelMedium"
+							style={{
+								color: theme.colors.onPrimaryContainer,
+								fontWeight: "bold",
+							}}
+						>
+							{getTotalUsers()} users within {radiusInMiles} mile
+							{radiusInMiles !== 1 ? "s" : ""}
+						</Text>
+					</Surface>
+				</TouchableOpacity>
 			)}
 
 			{/* Debug FAB (development only) */}
@@ -555,6 +699,79 @@ export default function MapScreen() {
 				onPress={() => setShowSettingsModal(true)}
 				size="small"
 			/>
+
+			{/* NEW: Users List Modal */}
+			<Portal>
+				<Modal
+					visible={showUsersModal}
+					onDismiss={() => setShowUsersModal(false)}
+					contentContainerStyle={styles.modalContent}
+				>
+					<View style={styles.modalHeader}>
+						<Text variant="titleMedium">Nearby Users ({getTotalUsers()})</Text>
+						<IconButton
+							icon="close"
+							onPress={() => setShowUsersModal(false)}
+							size={20}
+						/>
+					</View>
+
+					<Text variant="bodySmall" style={styles.modalSubtext}>
+						Users within {radiusInMiles} mile{radiusInMiles !== 1 ? "s" : ""} of
+						your location
+					</Text>
+
+					{loadingUsers ? (
+						<View style={styles.loadingContainer}>
+							<Text variant="bodyMedium">Loading users...</Text>
+						</View>
+					) : nearbyUsersList.length > 0 ? (
+						<ScrollView
+							style={styles.usersList}
+							showsVerticalScrollIndicator={false}
+						>
+							{nearbyUsersList.map((nearbyUser) => (
+								<Card key={nearbyUser.id} style={styles.userCard}>
+									<Card.Content style={styles.userCardContent}>
+										<View style={styles.userRow}>
+											<View style={styles.userInfo}>
+												<Text variant="bodyLarge" style={styles.userName}>
+													{nearbyUser.display_name || "Kindura User"}
+												</Text>
+												<Text variant="bodySmall" style={styles.userDistance}>
+													~{nearbyUser.distance} km away
+												</Text>
+											</View>
+											<View style={styles.userActivity}>
+												<Text variant="bodySmall" style={styles.userActiveDate}>
+													Active{" "}
+													{new Date(
+														nearbyUser.last_active
+													).toLocaleDateString()}
+												</Text>
+											</View>
+										</View>
+									</Card.Content>
+								</Card>
+							))}
+						</ScrollView>
+					) : (
+						<View style={styles.emptyContainer}>
+							<Text variant="bodyMedium" style={styles.emptyText}>
+								No users found in this area
+							</Text>
+						</View>
+					)}
+
+					<Button
+						mode="outlined"
+						onPress={() => setShowUsersModal(false)}
+						style={{ marginTop: 16, borderRadius: 8 }}
+					>
+						Close
+					</Button>
+				</Modal>
+			</Portal>
 
 			{/* Settings Modal */}
 			<Portal>
