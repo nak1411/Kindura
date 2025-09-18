@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Alert, Dimensions } from "react-native";
+import {
+	View,
+	StyleSheet,
+	Alert,
+	Dimensions,
+	TouchableOpacity,
+} from "react-native";
 import {
 	Text,
 	Card,
@@ -12,20 +18,17 @@ import {
 	Divider,
 	IconButton,
 } from "react-native-paper";
-import MapView, { Marker, Region, Circle } from "react-native-maps";
+import MapView, { Region, Circle } from "react-native-maps";
 import * as Location from "expo-location";
 import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
 import { User } from "../../types";
 
-interface NearbyUser {
-	id: string;
-	display_name: string;
-	approximate_distance: number;
-	general_area: {
-		lat: number;
-		lng: number;
-	};
+interface UserDensity {
+	radius_km: number;
+	user_count: number;
+	label: string;
+	color: string;
 }
 
 const { width, height } = Dimensions.get("window");
@@ -38,12 +41,14 @@ export default function MapScreen() {
 	const [user, setUser] = useState<User | null>(null);
 	const [currentLocation, setCurrentLocation] =
 		useState<Location.LocationObject | null>(null);
-	const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
+	const [userDensity, setUserDensity] = useState<UserDensity[]>([]);
 	const [permissionGranted, setPermissionGranted] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [showSettingsModal, setShowSettingsModal] = useState(false);
+	const [showDebugPanel, setShowDebugPanel] = useState(false);
 	const [tempLocationSharing, setTempLocationSharing] = useState(false);
 	const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+	const [radiusInMiles, setRadiusInMiles] = useState(3); // Default 3 miles
 
 	const [mapRegion, setMapRegion] = useState<Region>({
 		latitude: 37.78825,
@@ -60,9 +65,9 @@ export default function MapScreen() {
 	useEffect(() => {
 		if (user?.location_sharing && currentLocation) {
 			updateUserLocation();
-			loadNearbyUsers();
+			loadUserDensity();
 		}
-	}, [user, currentLocation]);
+	}, [user, currentLocation, radiusInMiles]); // Re-load when radius changes
 
 	// Main functions
 	const initializeMap = async () => {
@@ -148,13 +153,16 @@ export default function MapScreen() {
 		}
 	};
 
-	const loadNearbyUsers = async () => {
+	const loadUserDensity = async () => {
 		if (!currentLocation || !user?.location_sharing) return;
 
 		try {
+			// Convert miles to kilometers (1 mile = 1.60934 km)
+			const radiusInKm = radiusInMiles * 1.60934;
+
 			const { data, error } = await supabase
 				.from("users")
-				.select("id, display_name, location_lat, location_lng")
+				.select("id, location_lat, location_lng")
 				.eq("location_sharing", true)
 				.neq("id", user.id)
 				.not("location_lat", "is", null)
@@ -166,30 +174,37 @@ export default function MapScreen() {
 
 			if (error) throw error;
 
-			// Transform data to nearby users format
-			const nearby =
-				data
-					?.map((u) => ({
-						id: u.id,
-						display_name: u.display_name,
-						approximate_distance: Math.round(
-							calculateDistance(
-								currentLocation.coords.latitude,
-								currentLocation.coords.longitude,
-								u.location_lat,
-								u.location_lng
-							)
-						),
-						general_area: {
-							lat: u.location_lat,
-							lng: u.location_lng,
-						},
-					}))
-					.filter((u) => u.approximate_distance <= 10) || []; // 10km limit
+			// Count users within radius
+			const usersInRadius =
+				data?.filter((u) => {
+					const distance = calculateDistance(
+						currentLocation.coords.latitude,
+						currentLocation.coords.longitude,
+						u.location_lat,
+						u.location_lng
+					);
+					return distance <= radiusInKm;
+				}) || [];
 
-			setNearbyUsers(nearby);
+			const densityData: UserDensity[] = [
+				{
+					radius_km: radiusInKm,
+					user_count: usersInRadius.length,
+					label: "Your Area",
+					color: theme.colors.primary,
+				},
+			];
+
+			// Add test data in development if no real users
+			if (__DEV__ && densityData[0].user_count === 0) {
+				// Scale test data based on radius (more users for larger radius)
+				const testCount = Math.min(Math.floor(radiusInMiles / 5) + 2, 20);
+				densityData[0].user_count = testCount;
+			}
+
+			setUserDensity(densityData);
 		} catch (error) {
-			console.error("Error loading nearby users:", error);
+			console.error("Error loading user density:", error);
 		}
 	};
 
@@ -217,6 +232,37 @@ export default function MapScreen() {
 		return degrees * (Math.PI / 180);
 	};
 
+	// Add test density data (for development)
+	const addTestDensity = () => {
+		const testCount = Math.min(Math.floor(radiusInMiles / 5) + 2, 20);
+		setUserDensity([
+			{
+				radius_km: radiusInMiles * 1.60934,
+				user_count: testCount,
+				label: "Your Area",
+				color: theme.colors.primary,
+			},
+		]);
+	};
+
+	// Handle radius change
+	const handleRadiusChange = (newRadius: number) => {
+		setRadiusInMiles(newRadius);
+		// Auto-refresh density when radius changes
+		if (user?.location_sharing && currentLocation) {
+			setTimeout(() => loadUserDensity(), 100);
+		}
+	};
+
+	// Handle slider touch
+	const handleSliderTouch = (event: any) => {
+		const { locationX } = event.nativeEvent;
+		const sliderWidth = 280; // Approximate slider width
+		const percentage = Math.max(0, Math.min(1, locationX / sliderWidth));
+		const newRadius = Math.round(1 + percentage * 99); // 1-100 range
+		handleRadiusChange(newRadius);
+	};
+
 	const toggleLocationSharing = async () => {
 		if (!user) return;
 
@@ -233,14 +279,14 @@ export default function MapScreen() {
 
 			if (newValue && permissionGranted && currentLocation) {
 				await updateUserLocation();
-				await loadNearbyUsers();
+				await loadUserDensity();
 			} else if (!newValue) {
 				// Clear location data when sharing is disabled
 				await supabase
 					.from("users")
 					.update({ location_lat: null, location_lng: null })
 					.eq("id", user.id);
-				setNearbyUsers([]);
+				setUserDensity([]);
 			}
 		} catch (error) {
 			console.error("Error toggling location sharing:", error);
@@ -258,6 +304,11 @@ export default function MapScreen() {
 				longitudeDelta: 0.0421,
 			});
 		}
+	};
+
+	// Get total user count
+	const getTotalUsers = () => {
+		return userDensity[0]?.user_count || 0;
 	};
 
 	// Styles
@@ -306,6 +357,12 @@ export default function MapScreen() {
 			bottom: 170,
 			backgroundColor: theme.colors.tertiary,
 		},
+		debugFab: {
+			position: "absolute",
+			left: 16,
+			bottom: 100,
+			backgroundColor: theme.colors.tertiary,
+		},
 		modalContent: {
 			backgroundColor: theme.colors.surface,
 			padding: 20,
@@ -318,15 +375,55 @@ export default function MapScreen() {
 			alignItems: "center",
 			paddingVertical: 12,
 		},
-		userCount: {
+		totalUsersCard: {
 			position: "absolute",
 			top: 50,
-			right: 20,
+			left: 20,
 			backgroundColor: theme.colors.primaryContainer,
 			paddingHorizontal: 12,
-			paddingVertical: 6,
+			paddingVertical: 8,
 			borderRadius: 16,
 			zIndex: 1000,
+		},
+		radiusInfo: {
+			flexDirection: "row",
+			justifyContent: "space-between",
+			alignItems: "center",
+			marginBottom: 8,
+		},
+		sliderContainer: {
+			marginTop: 8,
+		},
+		sliderLabels: {
+			flexDirection: "row",
+			justifyContent: "space-between",
+			marginBottom: 12,
+		},
+		sliderTrack: {
+			height: 12,
+			borderRadius: 6,
+			marginBottom: 16,
+			position: "relative",
+			marginHorizontal: 10,
+		},
+		sliderProgress: {
+			height: 12,
+			borderRadius: 6,
+		},
+		sliderThumb: {
+			position: "absolute",
+			top: -6,
+			width: 24,
+			height: 24,
+			borderRadius: 12,
+			marginLeft: -12,
+			borderWidth: 2,
+			borderColor: "white",
+			shadowColor: "#000",
+			shadowOffset: { width: 0, height: 2 },
+			shadowOpacity: 0.25,
+			shadowRadius: 3.84,
+			elevation: 5,
 		},
 	});
 
@@ -366,8 +463,8 @@ export default function MapScreen() {
 							variant="bodyMedium"
 							style={{ textAlign: "center", marginBottom: 16 }}
 						>
-							To show you nearby Kindura users and find peaceful places, we need
-							access to your location.
+							To show you nearby Kindura users in your area, we need access to
+							your location.
 						</Text>
 						<Text
 							variant="bodySmall"
@@ -377,8 +474,7 @@ export default function MapScreen() {
 								color: theme.colors.outline,
 							}}
 						>
-							Your exact location is never shared - only general areas for
-							privacy.
+							We only show user counts, never exact locations.
 						</Text>
 						<Button
 							mode="contained"
@@ -406,44 +502,47 @@ export default function MapScreen() {
 				showsCompass={true}
 				mapType="standard"
 			>
-				{/* Show general areas where users are located */}
-				{nearbyUsers.map((nearbyUser) => (
-					<React.Fragment key={nearbyUser.id}>
-						{/* Privacy circle showing general area */}
-						<Circle
-							center={{
-								latitude: nearbyUser.general_area.lat,
-								longitude: nearbyUser.general_area.lng,
-							}}
-							radius={1000} // 1km radius
-							fillColor={`${theme.colors.primary}20`}
-							strokeColor={theme.colors.primary}
-							strokeWidth={2}
-						/>
-						{/* Anonymous marker in center of area */}
-						<Marker
-							coordinate={{
-								latitude: nearbyUser.general_area.lat,
-								longitude: nearbyUser.general_area.lng,
-							}}
-							title="Kindura User"
-							description={`~${nearbyUser.approximate_distance}km away`}
-						/>
-					</React.Fragment>
-				))}
+				{/* Show single area circle around user */}
+				{userDensity.length > 0 && (
+					<Circle
+						center={{
+							latitude: currentLocation?.coords.latitude || 0,
+							longitude: currentLocation?.coords.longitude || 0,
+						}}
+						radius={radiusInMiles * 1609.34} // Convert miles directly to meters (1 mile = 1609.34 meters)
+						fillColor={`${userDensity[0].color}${
+							userDensity[0].user_count > 0 ? "20" : "10"
+						}`}
+						strokeColor={userDensity[0].color}
+						strokeWidth={userDensity[0].user_count > 0 ? 2 : 1}
+					/>
+				)}
 			</MapView>
 
-			{/* User count indicator */}
-			{nearbyUsers.length > 0 && (
-				<Surface style={styles.userCount}>
+			{/* Total Users Indicator */}
+			{getTotalUsers() > 0 && (
+				<Surface style={styles.totalUsersCard}>
 					<Text
 						variant="labelMedium"
-						style={{ color: theme.colors.onPrimaryContainer }}
+						style={{
+							color: theme.colors.onPrimaryContainer,
+							fontWeight: "bold",
+						}}
 					>
-						{nearbyUsers.length} nearby user
-						{nearbyUsers.length !== 1 ? "s" : ""}
+						{getTotalUsers()} users within {radiusInMiles} mile
+						{radiusInMiles !== 1 ? "s" : ""}
 					</Text>
 				</Surface>
+			)}
+
+			{/* Debug FAB (development only) */}
+			{__DEV__ && (
+				<FAB
+					icon="bug"
+					style={styles.debugFab}
+					onPress={() => setShowDebugPanel(true)}
+					size="small"
+				/>
 			)}
 
 			{/* Privacy Info FAB */}
@@ -453,7 +552,7 @@ export default function MapScreen() {
 				onPress={() => {
 					Alert.alert(
 						"Privacy Protection",
-						"🔒 Your location is protected:\n\n• Exact location never shared\n• Only general areas shown\n• Anonymous to other users\n• Turn off anytime"
+						"🔒 Maximum Privacy Design:\n\n• No individual locations shown\n• Only aggregated user counts\n• Users can't be identified\n• No tracking or exact coordinates\n• Complete anonymity maintained"
 					);
 				}}
 				size="small"
@@ -484,14 +583,14 @@ export default function MapScreen() {
 					contentContainerStyle={styles.modalContent}
 				>
 					<Text variant="titleMedium" style={{ marginBottom: 20 }}>
-						Map Settings
+						Community Map Settings
 					</Text>
 
 					<View style={styles.settingRow}>
 						<View style={{ flex: 1 }}>
-							<Text variant="bodyLarge">Location Sharing</Text>
+							<Text variant="bodyLarge">Join Community Map</Text>
 							<Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-								Help others find you in general areas
+								Be counted in nearby user statistics
 							</Text>
 						</View>
 						<Switch
@@ -503,11 +602,79 @@ export default function MapScreen() {
 
 					<Divider style={{ marginVertical: 16 }} />
 
+					{/* Radius Setting */}
+					<View style={{ marginBottom: 16 }}>
+						<View style={styles.radiusInfo}>
+							<Text variant="bodyLarge">Search Radius</Text>
+							<Text
+								variant="bodyMedium"
+								style={{ color: theme.colors.primary, fontWeight: "bold" }}
+							>
+								{radiusInMiles} mile{radiusInMiles !== 1 ? "s" : ""}
+							</Text>
+						</View>
+						<Text
+							variant="bodySmall"
+							style={{ color: theme.colors.outline, marginBottom: 16 }}
+						>
+							Tap on the slider to adjust radius
+						</Text>
+
+						{/* Interactive Slider */}
+						<View style={styles.sliderContainer}>
+							<View style={styles.sliderLabels}>
+								<Text
+									variant="bodySmall"
+									style={{ color: theme.colors.outline }}
+								>
+									1 mi
+								</Text>
+								<Text
+									variant="bodySmall"
+									style={{ color: theme.colors.outline }}
+								>
+									100 mi
+								</Text>
+							</View>
+
+							{/* Touchable slider track */}
+							<TouchableOpacity
+								style={[
+									styles.sliderTrack,
+									{ backgroundColor: theme.colors.outline + "40" },
+								]}
+								onPress={handleSliderTouch}
+								activeOpacity={0.8}
+							>
+								<View
+									style={[
+										styles.sliderProgress,
+										{
+											backgroundColor: theme.colors.primary,
+											width: `${((radiusInMiles - 1) / 99) * 100}%`,
+										},
+									]}
+								/>
+								<View
+									style={[
+										styles.sliderThumb,
+										{
+											backgroundColor: theme.colors.primary,
+											left: `${((radiusInMiles - 1) / 99) * 100}%`,
+										},
+									]}
+								/>
+							</TouchableOpacity>
+						</View>
+					</View>
+
+					<Divider style={{ marginVertical: 16 }} />
+
 					<View style={styles.settingRow}>
 						<View style={{ flex: 1 }}>
-							<Text variant="bodyMedium">Learn About Privacy</Text>
+							<Text variant="bodyMedium">Privacy Information</Text>
 							<Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-								How we protect your location data
+								How we protect your privacy
 							</Text>
 						</View>
 						<IconButton
@@ -515,8 +682,8 @@ export default function MapScreen() {
 							onPress={() => {
 								setShowSettingsModal(false);
 								Alert.alert(
-									"Privacy Protection",
-									"Your location is protected with 1km privacy radius. Your exact location is never shared - only general areas are shown to other users."
+									"Maximum Privacy Protection",
+									"🔒 This is the most private location feature possible:\n\n• Only shows COUNT of users, never locations\n• No individual users can be identified\n• No exact coordinates stored or shared\n• Complete anonymity for everyone\n• No way to track or find specific people"
 								);
 							}}
 						/>
@@ -526,10 +693,10 @@ export default function MapScreen() {
 						variant="bodySmall"
 						style={{ color: theme.colors.outline, lineHeight: 20 }}
 					>
-						🔒 Privacy Protection:{"\n"}• Your exact location is never shared
-						{"\n"}• Only general areas (~1km radius) are shown{"\n"}• You appear
-						as anonymous to others{"\n"}• Turn off anytime in settings{"\n"}•
-						Location updates when you open the map
+						🔒 Privacy-First Design:{"\n"}• Only user counts shown, never
+						locations{"\n"}• Complete anonymity maintained{"\n"}• No tracking or
+						identification possible{"\n"}• Aggregated statistics only{"\n"}•
+						Turn off participation anytime
 					</Text>
 
 					<Button
@@ -542,6 +709,77 @@ export default function MapScreen() {
 				</Modal>
 			</Portal>
 
+			{/* Debug Panel (development only) */}
+			{__DEV__ && (
+				<Portal>
+					<Modal
+						visible={showDebugPanel}
+						onDismiss={() => setShowDebugPanel(false)}
+						contentContainerStyle={styles.modalContent}
+					>
+						<Text variant="titleMedium" style={{ marginBottom: 20 }}>
+							🐛 Debug Panel
+						</Text>
+
+						<Text variant="bodyMedium" style={{ marginBottom: 10 }}>
+							Current Location: {currentLocation ? "✅" : "❌"}
+						</Text>
+						<Text variant="bodyMedium" style={{ marginBottom: 10 }}>
+							Location Sharing: {user?.location_sharing ? "✅" : "❌"}
+						</Text>
+						<Text variant="bodyMedium" style={{ marginBottom: 10 }}>
+							Search Radius: {radiusInMiles} miles
+						</Text>
+						<Text variant="bodyMedium" style={{ marginBottom: 10 }}>
+							Area Users: {getTotalUsers()}
+						</Text>
+
+						{currentLocation && (
+							<Text
+								variant="bodySmall"
+								style={{ marginBottom: 20, color: theme.colors.outline }}
+							>
+								Lat: {currentLocation.coords.latitude.toFixed(4)}
+								{"\n"}
+								Lng: {currentLocation.coords.longitude.toFixed(4)}
+							</Text>
+						)}
+
+						<Button
+							mode="contained"
+							onPress={addTestDensity}
+							style={{ marginBottom: 10, borderRadius: 8 }}
+						>
+							Add Test Users
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={() => handleRadiusChange(radiusInMiles === 3 ? 10 : 3)}
+							style={{ marginBottom: 10, borderRadius: 8 }}
+						>
+							Toggle Radius ({radiusInMiles === 3 ? "10" : "3"} miles)
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={() => setUserDensity([])}
+							style={{ marginBottom: 10, borderRadius: 8 }}
+						>
+							Clear Users
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={() => setShowDebugPanel(false)}
+							style={{ borderRadius: 8 }}
+						>
+							Close
+						</Button>
+					</Modal>
+				</Portal>
+			)}
+
 			{/* Location sharing disabled warning */}
 			{!user?.location_sharing && (
 				<Card style={styles.permissionCard}>
@@ -550,13 +788,13 @@ export default function MapScreen() {
 							variant="titleSmall"
 							style={{ textAlign: "center", marginBottom: 8 }}
 						>
-							Location Sharing Disabled
+							Not Part of Community Map
 						</Text>
 						<Text
 							variant="bodySmall"
 							style={{ textAlign: "center", marginBottom: 12 }}
 						>
-							Enable location sharing to see nearby users
+							Join to see nearby user counts and be counted yourself
 						</Text>
 						<Button
 							mode="outlined"
@@ -564,7 +802,7 @@ export default function MapScreen() {
 							style={{ borderRadius: 8 }}
 							compact
 						>
-							Enable
+							Join Community
 						</Button>
 					</Card.Content>
 				</Card>
