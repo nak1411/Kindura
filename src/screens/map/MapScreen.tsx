@@ -348,26 +348,20 @@ export default function MapScreen() {
 		settingsFab: {
 			position: "absolute",
 			right: 16,
-			bottom: 170,
+			bottom: 160,
 			backgroundColor: theme.colors.secondary,
-		},
-		privacyFab: {
-			position: "absolute",
-			left: 16,
-			bottom: 170,
-			backgroundColor: theme.colors.tertiary,
 		},
 		debugFab: {
 			position: "absolute",
-			left: 16,
-			bottom: 100,
-			backgroundColor: theme.colors.tertiary,
+			right: 16,
+			bottom: 205,
+			backgroundColor: theme.colors.error,
 		},
 		modalContent: {
 			backgroundColor: theme.colors.surface,
 			padding: 20,
 			margin: 20,
-			borderRadius: 12,
+			borderRadius: 8,
 		},
 		settingRow: {
 			flexDirection: "row",
@@ -545,19 +539,6 @@ export default function MapScreen() {
 				/>
 			)}
 
-			{/* Privacy Info FAB */}
-			<FAB
-				icon="shield-check"
-				style={styles.privacyFab}
-				onPress={() => {
-					Alert.alert(
-						"Privacy Protection",
-						"🔒 Maximum Privacy Design:\n\n• No individual locations shown\n• Only aggregated user counts\n• Users can't be identified\n• No tracking or exact coordinates\n• Complete anonymity maintained"
-					);
-				}}
-				size="small"
-			/>
-
 			{/* Center on location FAB */}
 			<FAB
 				icon="crosshairs-gps"
@@ -667,37 +648,6 @@ export default function MapScreen() {
 							</TouchableOpacity>
 						</View>
 					</View>
-
-					<Divider style={{ marginVertical: 16 }} />
-
-					<View style={styles.settingRow}>
-						<View style={{ flex: 1 }}>
-							<Text variant="bodyMedium">Privacy Information</Text>
-							<Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-								How we protect your privacy
-							</Text>
-						</View>
-						<IconButton
-							icon="information-outline"
-							onPress={() => {
-								setShowSettingsModal(false);
-								Alert.alert(
-									"Maximum Privacy Protection",
-									"🔒 This is the most private location feature possible:\n\n• Only shows COUNT of users, never locations\n• No individual users can be identified\n• No exact coordinates stored or shared\n• Complete anonymity for everyone\n• No way to track or find specific people"
-								);
-							}}
-						/>
-					</View>
-
-					<Text
-						variant="bodySmall"
-						style={{ color: theme.colors.outline, lineHeight: 20 }}
-					>
-						🔒 Privacy-First Design:{"\n"}• Only user counts shown, never
-						locations{"\n"}• Complete anonymity maintained{"\n"}• No tracking or
-						identification possible{"\n"}• Aggregated statistics only{"\n"}•
-						Turn off participation anytime
-					</Text>
 
 					<Button
 						mode="outlined"
