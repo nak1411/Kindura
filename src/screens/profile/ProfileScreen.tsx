@@ -24,9 +24,6 @@ type Profile = {
 	preferences: any;
 	notifications_enabled?: boolean;
 	location_sharing?: boolean;
-	quests_completed?: number;
-	rooms_participated?: number;
-	nudges_sent?: number;
 };
 
 export default function ProfileScreen() {
@@ -46,19 +43,27 @@ export default function ProfileScreen() {
 
 			if (!user) return;
 
-			const { data, error } = await supabase
+			// Use array query instead of .single() to avoid PGRST116 error
+			const { data: profiles, error } = await supabase
 				.from("users")
 				.select("*")
-				.eq("id", user.id)
-				.single();
+				.eq("id", user.id);
 
 			if (error) {
 				console.error("Error fetching profile:", error);
 				return;
 			}
 
+			// Check if profile exists
+			if (!profiles || profiles.length === 0) {
+				console.log("No profile found for user:", user.id);
+				// Could redirect to onboarding here if needed
+				return;
+			}
+
+			const profileData = profiles[0];
 			setProfile({
-				...data,
+				...profileData,
 				email: user.email || "",
 			});
 		} catch (error) {
@@ -143,14 +148,22 @@ export default function ProfileScreen() {
 							variant="titleMedium"
 							style={[styles.badgeText, { color: theme.colors.primary }]}
 						>
-							New User
-						</Text>
-						<Text
-							variant="bodyMedium"
-							style={[styles.careScore, { color: theme.colors.outline }]}
-						>
 							Care Score: {profile.care_score}
 						</Text>
+						{profile.faith_mode && (
+							<Chip
+								mode="flat"
+								compact
+								style={{
+									backgroundColor: theme.colors.primaryContainer,
+									marginTop: 8,
+								}}
+								textStyle={{ color: theme.colors.onPrimaryContainer }}
+								icon="hands-pray"
+							>
+								Faith Mode
+							</Chip>
+						)}
 					</View>
 
 					{profile.bio && (
@@ -170,50 +183,53 @@ export default function ProfileScreen() {
 			>
 				<Card.Content>
 					<Text
-						variant="titleLarge"
-						style={[styles.statsTitle, { color: theme.colors.primary }]}
+						variant="titleMedium"
+						style={{ color: theme.colors.onSurface, marginBottom: 16 }}
 					>
 						Your Journey
 					</Text>
-					<View style={styles.statsGrid}>
+
+					<View style={styles.statsRow}>
 						<View style={styles.statItem}>
 							<Text
-								variant="headlineMedium"
-								style={[styles.statNumber, { color: theme.colors.primary }]}
+								variant="headlineSmall"
+								style={{ color: theme.colors.primary }}
 							>
-								{profile.quests_completed || 0}
+								0
 							</Text>
 							<Text
 								variant="bodySmall"
-								style={[styles.statLabel, { color: theme.colors.outline }]}
+								style={{ color: theme.colors.onSurfaceVariant }}
 							>
-								Quests{"\n"}Completed
+								Quests
 							</Text>
 						</View>
+
 						<View style={styles.statItem}>
 							<Text
-								variant="headlineMedium"
-								style={[styles.statNumber, { color: theme.colors.primary }]}
+								variant="headlineSmall"
+								style={{ color: theme.colors.primary }}
 							>
-								{profile.rooms_participated || 0}
+								0
 							</Text>
 							<Text
 								variant="bodySmall"
-								style={[styles.statLabel, { color: theme.colors.outline }]}
+								style={{ color: theme.colors.onSurfaceVariant }}
 							>
-								Rooms{"\n"}Joined
+								Rooms
 							</Text>
 						</View>
+
 						<View style={styles.statItem}>
 							<Text
-								variant="headlineMedium"
-								style={[styles.statNumber, { color: theme.colors.primary }]}
+								variant="headlineSmall"
+								style={{ color: theme.colors.primary }}
 							>
-								{profile.nudges_sent || 0}
+								0
 							</Text>
 							<Text
 								variant="bodySmall"
-								style={[styles.statLabel, { color: theme.colors.outline }]}
+								style={{ color: theme.colors.onSurfaceVariant }}
 							>
 								Nudges
 							</Text>
@@ -228,19 +244,14 @@ export default function ProfileScreen() {
 			>
 				<Card.Content>
 					<Text
-						variant="titleLarge"
-						style={[styles.settingsTitle, { color: theme.colors.primary }]}
+						variant="titleMedium"
+						style={{ color: theme.colors.onSurface, marginBottom: 16 }}
 					>
 						Settings
 					</Text>
 
-					{/* Theme Toggle */}
-					<ThemeToggle />
-
-					<Divider style={styles.divider} />
-
-					<View style={styles.settingItem}>
-						<View style={styles.settingText}>
+					<View style={styles.settingRow}>
+						<View style={styles.settingInfo}>
 							<Text
 								variant="bodyLarge"
 								style={{ color: theme.colors.onSurface }}
@@ -254,7 +265,7 @@ export default function ProfileScreen() {
 									{ color: theme.colors.outline },
 								]}
 							>
-								Receive reminders and updates
+								Get notified about new activities
 							</Text>
 						</View>
 						<Switch
@@ -268,8 +279,8 @@ export default function ProfileScreen() {
 
 					<Divider style={styles.divider} />
 
-					<View style={styles.settingItem}>
-						<View style={styles.settingText}>
+					<View style={styles.settingRow}>
+						<View style={styles.settingInfo}>
 							<Text
 								variant="bodyLarge"
 								style={{ color: theme.colors.onSurface }}
@@ -320,6 +331,10 @@ export default function ProfileScreen() {
 								</View>
 							</>
 						)}
+
+					<Divider style={styles.divider} />
+
+					<ThemeToggle />
 				</Card.Content>
 			</Card>
 
@@ -369,6 +384,7 @@ export default function ProfileScreen() {
 						onPress={handleSignOut}
 						style={[styles.actionButton, styles.signOutButton]}
 						buttonColor={theme.colors.error}
+						textColor={theme.colors.onError}
 					>
 						Sign Out
 					</Button>
@@ -381,75 +397,59 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
+		padding: 16,
 	},
 	profileHeader: {
-		alignItems: "center",
-		padding: 24,
-		margin: 16,
-		borderRadius: 8,
+		marginBottom: 16,
 	},
 	avatar: {
-		marginBottom: 16,
 		alignSelf: "center",
+		marginBottom: 16,
 	},
 	displayName: {
-		marginBottom: 8,
 		textAlign: "center",
+		marginBottom: 8,
 	},
 	badgeContainer: {
 		alignItems: "center",
 		marginBottom: 16,
 	},
 	badgeText: {
-		marginBottom: 4,
+		fontWeight: "600",
 	},
-	careScore: {},
 	bio: {
 		textAlign: "center",
-		lineHeight: 20,
+		fontStyle: "italic",
+		marginTop: 8,
 	},
 	statsCard: {
-		margin: 16,
-		marginTop: 0,
-		borderRadius: 8,
-	},
-	statsTitle: {
 		marginBottom: 16,
-		textAlign: "center",
 	},
-	statsGrid: {
+	statsRow: {
 		flexDirection: "row",
 		justifyContent: "space-around",
 	},
 	statItem: {
 		alignItems: "center",
 	},
-	statNumber: {
-		fontWeight: "bold",
-	},
-	statLabel: {
-		textAlign: "center",
-		marginTop: 4,
-	},
 	settingsCard: {
-		margin: 16,
-		marginTop: 0,
-		borderRadius: 8,
-	},
-	settingsTitle: {
 		marginBottom: 16,
 	},
-	settingItem: {
+	settingRow: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
-		paddingVertical: 16,
+		paddingVertical: 8,
 	},
-	settingText: {
+	settingInfo: {
 		flex: 1,
+		marginRight: 16,
 	},
 	settingDescription: {
 		marginTop: 4,
+	},
+	divider: {
+		marginVertical: 16,
 	},
 	preferenceTags: {
 		flexDirection: "row",
@@ -457,20 +457,13 @@ const styles = StyleSheet.create({
 		gap: 8,
 		marginTop: 8,
 	},
-	divider: {
-		marginVertical: 8,
-	},
 	actionsCard: {
-		margin: 16,
-		marginTop: 0,
 		marginBottom: 32,
-		borderRadius: 8,
 	},
 	actionButton: {
-		marginBottom: 16,
-		borderRadius: 8,
+		marginBottom: 12,
 	},
 	signOutButton: {
-		marginTop: 16,
+		marginTop: 8,
 	},
 });

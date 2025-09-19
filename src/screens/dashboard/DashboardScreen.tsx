@@ -57,22 +57,28 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 
 			if (!user) return;
 
-			// Fetch user profile
-			const { data: profile } = await supabase
+			// Fetch user profile - use array query instead of .single() to avoid PGRST116 error
+			const { data: profiles, error } = await supabase
 				.from("users")
 				.select("*")
-				.eq("id", user.id)
-				.single();
+				.eq("id", user.id);
 
-			if (profile) {
+			if (error) {
+				console.error("Error fetching dashboard data:", error);
+			} else if (profiles && profiles.length > 0) {
+				const profile = profiles[0];
 				setUserName(profile.display_name || "Friend");
 				setStats({
-					questsCompleted: profile.quests_completed || 0,
-					roomsJoined: profile.rooms_participated || 0,
-					nudgesSent: profile.nudges_sent || 0,
+					questsCompleted: 0, // These fields don't exist in DB yet
+					roomsJoined: 0,
+					nudgesSent: 0,
 					careScore: profile.care_score || 0,
-					currentStreak: profile.current_streak || 0,
+					currentStreak: 0,
 				});
+			} else {
+				console.log("No profile found for user:", user.id);
+				// User might not have completed onboarding yet
+				setUserName("Friend");
 			}
 
 			// Mock recent activity - in a real app, you'd fetch this from your database
@@ -125,322 +131,369 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 		}
 	};
 
-	const styles = StyleSheet.create({
-		container: {
-			flex: 1,
-			backgroundColor: theme.colors.background,
-		},
-		header: {
-			backgroundColor: theme.colors.surface,
-			elevation: 4,
-			paddingTop: 40,
-			paddingBottom: 16,
-			paddingHorizontal: 16,
-		},
-		greeting: {
-			color: theme.colors.outline,
-			marginBottom: 4,
-		},
-		welcomeMessage: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-		},
-		scrollContent: {
-			padding: 16,
-		},
-		statsCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
-			elevation: 2,
-		},
-		statsTitle: {
-			color: theme.colors.primary,
-			marginBottom: 16,
-			textAlign: "center",
-		},
-		statsGrid: {
-			flexDirection: "row",
-			flexWrap: "wrap",
-			justifyContent: "space-between",
-		},
-		statItem: {
-			alignItems: "center",
-			width: "48%",
-			marginBottom: 16,
-		},
-		statNumber: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-			fontSize: 24,
-		},
-		statLabel: {
-			color: theme.colors.outline,
-			textAlign: "center",
-			marginTop: 4,
-			fontSize: 12,
-		},
-		careScoreCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
-			elevation: 2,
-		},
-		careScoreTitle: {
-			color: theme.colors.primary,
-			marginBottom: 8,
-		},
-		careScoreValue: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-			textAlign: "center",
-			marginBottom: 8,
-		},
-		progressBar: {
-			height: 8,
-			borderRadius: 4,
-			marginBottom: 8,
-		},
-		progressText: {
-			color: theme.colors.outline,
-			textAlign: "center",
-			fontSize: 12,
-		},
-		quickActionsCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
-			elevation: 2,
-		},
-		quickActionsTitle: {
-			color: theme.colors.primary,
-			marginBottom: 16,
-		},
-		actionsGrid: {
-			flexDirection: "row",
-			flexWrap: "wrap",
-			justifyContent: "space-between",
-		},
-		actionButton: {
-			width: "48%",
-			marginBottom: 12,
-			borderRadius: 8,
-		},
-		recentActivityCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
-			elevation: 2,
-		},
-		activityTitle: {
-			color: theme.colors.primary,
-			marginBottom: 16,
-		},
-		activityItem: {
-			flexDirection: "row",
-			alignItems: "center",
-			paddingVertical: 12,
-			borderBottomWidth: 1,
-			borderBottomColor: theme.colors.outline,
-		},
-		activityIcon: {
-			marginRight: 12,
-		},
-		activityContent: {
-			flex: 1,
-		},
-		activityText: {
-			color: theme.colors.onSurface,
-			marginBottom: 2,
-		},
-		activityTime: {
-			color: theme.colors.outline,
-			fontSize: 12,
-		},
-		streakChip: {
-			backgroundColor: theme.colors.primaryContainer,
-			alignSelf: "center",
-			marginTop: 8,
-		},
-	});
+	const getActivityColor = (type: string) => {
+		switch (type) {
+			case "quest":
+				return theme.colors.primary;
+			case "room":
+				return theme.colors.secondary;
+			case "nudge":
+				return theme.colors.tertiary;
+			default:
+				return theme.colors.outline;
+		}
+	};
 
 	if (loading) {
 		return (
 			<View
 				style={[
 					styles.container,
-					{ justifyContent: "center", alignItems: "center" },
+					styles.centered,
+					{ backgroundColor: theme.colors.background },
 				]}
 			>
-				<Text>Loading...</Text>
+				<Text style={{ color: theme.colors.onBackground }}>
+					Loading your dashboard...
+				</Text>
 			</View>
 		);
 	}
 
 	return (
-		<View style={styles.container}>
-			{/* Header */}
-			<Surface style={styles.header}>
-				<Text variant="headlineMedium" style={styles.welcomeMessage}>
-					{getGreeting()}, {userName}
+		<ScrollView
+			style={[styles.container, { backgroundColor: theme.colors.background }]}
+		>
+			{/* Welcome Section */}
+			<Surface
+				style={[styles.welcomeCard, { backgroundColor: theme.colors.surface }]}
+			>
+				<Text
+					variant="headlineSmall"
+					style={[styles.greeting, { color: theme.colors.onSurface }]}
+				>
+					{getGreeting()}, {userName}! 🌟
+				</Text>
+				<Text
+					variant="bodyMedium"
+					style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
+				>
+					Ready to spread some kindness today?
 				</Text>
 			</Surface>
 
-			<ScrollView
-				style={styles.container}
-				contentContainerStyle={styles.scrollContent}
-				showsVerticalScrollIndicator={false}
+			{/* Stats Overview */}
+			<Card
+				style={[styles.statsCard, { backgroundColor: theme.colors.surface }]}
 			>
-				{/* Care Score */}
-				<Card style={styles.careScoreCard}>
-					<Card.Content>
-						<Text variant="titleLarge" style={styles.careScoreTitle}>
-							Your Care Score
-						</Text>
-						<Text variant="headlineLarge" style={styles.careScoreValue}>
-							{stats.careScore}
-						</Text>
-						<ProgressBar
-							progress={stats.careScore / 100}
-							style={styles.progressBar}
-							color={theme.colors.primary}
-						/>
-						<Text variant="bodySmall" style={styles.progressText}>
-							Keep spreading kindness to grow your score
-						</Text>
-						{stats.currentStreak > 0 && (
-							<Chip
-								icon="fire"
-								style={styles.streakChip}
-								textStyle={{ color: theme.colors.onPrimaryContainer }}
-							>
-								{stats.currentStreak} day streak
-							</Chip>
-						)}
-					</Card.Content>
-				</Card>
+				<Card.Content>
+					<Text
+						variant="titleMedium"
+						style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+					>
+						Your Impact
+					</Text>
 
-				{/* Stats Overview */}
-				<Card style={styles.statsCard}>
-					<Card.Content>
-						<Text variant="titleLarge" style={styles.statsTitle}>
-							Your Journey
-						</Text>
-						<View style={styles.statsGrid}>
-							<View style={styles.statItem}>
-								<Text style={styles.statNumber}>{stats.questsCompleted}</Text>
-								<Text style={styles.statLabel}>Quests{"\n"}Completed</Text>
-							</View>
-							<View style={styles.statItem}>
-								<Text style={styles.statNumber}>{stats.roomsJoined}</Text>
-								<Text style={styles.statLabel}>Rooms{"\n"}Joined</Text>
-							</View>
-							<View style={styles.statItem}>
-								<Text style={styles.statNumber}>{stats.nudgesSent}</Text>
-								<Text style={styles.statLabel}>Nudges</Text>
-							</View>
-							<View style={styles.statItem}>
-								<Text style={styles.statNumber}>
-									{stats.questsCompleted + stats.roomsJoined}
-								</Text>
-								<Text style={styles.statLabel}>Total{"\n"}Activities</Text>
-							</View>
-						</View>
-					</Card.Content>
-				</Card>
-
-				{/* Quick Actions */}
-				<Card style={styles.quickActionsCard}>
-					<Card.Content>
-						<Text variant="titleLarge" style={styles.quickActionsTitle}>
-							Quick Actions
-						</Text>
-						<View style={styles.actionsGrid}>
-							<Button
-								mode="contained"
-								style={styles.actionButton}
-								onPress={() => navigation.navigate("Quests")}
-								icon="compass"
-							>
-								Find Quest
-							</Button>
-							<Button
-								mode="contained"
-								style={styles.actionButton}
-								onPress={() => navigation.navigate("Rooms")}
-								icon="account-group"
-							>
-								Join Room
-							</Button>
-							<Button
-								mode="outlined"
-								style={styles.actionButton}
-								onPress={() => navigation.navigate("Map")}
-								icon="map-marker"
-							>
-								Explore Map
-							</Button>
-							<Button
-								mode="outlined"
-								style={styles.actionButton}
-								onPress={() => navigation.navigate("Profile")}
-								icon="account"
-							>
-								View Profile
-							</Button>
-						</View>
-					</Card.Content>
-				</Card>
-
-				{/* Recent Activity */}
-				<Card style={styles.recentActivityCard}>
-					<Card.Content>
-						<Text variant="titleLarge" style={styles.activityTitle}>
-							Recent Activity
-						</Text>
-						{recentActivity.length > 0 ? (
-							recentActivity.map((activity, index) => (
-								<View
-									key={activity.id}
-									style={[
-										styles.activityItem,
-										index === recentActivity.length - 1 && {
-											borderBottomWidth: 0,
-										},
-									]}
-								>
-									<MaterialCommunityIcons
-										name={getActivityIcon(activity.type)}
-										size={24}
-										color={theme.colors.primary}
-										style={styles.activityIcon}
-									/>
-									<View style={styles.activityContent}>
-										<Text variant="bodyMedium" style={styles.activityText}>
-											{activity.title}
-										</Text>
-										<Text variant="bodySmall" style={styles.activityTime}>
-											{activity.time}
-											{activity.participants &&
-												` • ${activity.participants} participants`}
-										</Text>
-									</View>
-								</View>
-							))
-						) : (
+					<View style={styles.statsGrid}>
+						<View style={styles.statItem}>
+							<MaterialCommunityIcons
+								name="compass"
+								size={24}
+								color={theme.colors.primary}
+							/>
 							<Text
-								variant="bodyMedium"
+								variant="headlineSmall"
+								style={[styles.statNumber, { color: theme.colors.primary }]}
+							>
+								{stats.questsCompleted}
+							</Text>
+							<Text
+								variant="bodySmall"
 								style={[
-									styles.activityText,
-									{ textAlign: "center", fontStyle: "italic" },
+									styles.statLabel,
+									{ color: theme.colors.onSurfaceVariant },
 								]}
 							>
-								No recent activity. Start your journey!
+								Quests
 							</Text>
-						)}
-					</Card.Content>
-				</Card>
-			</ScrollView>
-		</View>
+						</View>
+
+						<View style={styles.statItem}>
+							<MaterialCommunityIcons
+								name="account-group"
+								size={24}
+								color={theme.colors.secondary}
+							/>
+							<Text
+								variant="headlineSmall"
+								style={[styles.statNumber, { color: theme.colors.secondary }]}
+							>
+								{stats.roomsJoined}
+							</Text>
+							<Text
+								variant="bodySmall"
+								style={[
+									styles.statLabel,
+									{ color: theme.colors.onSurfaceVariant },
+								]}
+							>
+								Rooms
+							</Text>
+						</View>
+
+						<View style={styles.statItem}>
+							<MaterialCommunityIcons
+								name="heart"
+								size={24}
+								color={theme.colors.tertiary}
+							/>
+							<Text
+								variant="headlineSmall"
+								style={[styles.statNumber, { color: theme.colors.tertiary }]}
+							>
+								{stats.nudgesSent}
+							</Text>
+							<Text
+								variant="bodySmall"
+								style={[
+									styles.statLabel,
+									{ color: theme.colors.onSurfaceVariant },
+								]}
+							>
+								Nudges
+							</Text>
+						</View>
+					</View>
+
+					{/* Care Score */}
+					<View style={styles.careScoreSection}>
+						<View style={styles.careScoreHeader}>
+							<Text
+								variant="bodyLarge"
+								style={{ color: theme.colors.onSurface }}
+							>
+								Care Score
+							</Text>
+							<Chip
+								mode="flat"
+								compact
+								style={{ backgroundColor: theme.colors.primaryContainer }}
+								textStyle={{ color: theme.colors.onPrimaryContainer }}
+							>
+								{stats.careScore}/100
+							</Chip>
+						</View>
+						<ProgressBar
+							progress={stats.careScore / 100}
+							color={theme.colors.primary}
+							style={styles.progressBar}
+						/>
+						<Text
+							variant="bodySmall"
+							style={[
+								styles.progressText,
+								{ color: theme.colors.onSurfaceVariant },
+							]}
+						>
+							Keep going! Small acts of kindness make a big difference.
+						</Text>
+					</View>
+				</Card.Content>
+			</Card>
+
+			{/* Recent Activity */}
+			<Card
+				style={[styles.activityCard, { backgroundColor: theme.colors.surface }]}
+			>
+				<Card.Content>
+					<Text
+						variant="titleMedium"
+						style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+					>
+						Recent Activity
+					</Text>
+
+					{recentActivity.length > 0 ? (
+						recentActivity.map((activity) => (
+							<View key={activity.id} style={styles.activityItem}>
+								<MaterialCommunityIcons
+									name={getActivityIcon(activity.type)}
+									size={20}
+									color={getActivityColor(activity.type)}
+									style={styles.activityIcon}
+								/>
+								<View style={styles.activityContent}>
+									<Text
+										variant="bodyMedium"
+										style={{ color: theme.colors.onSurface }}
+									>
+										{activity.title}
+									</Text>
+									<Text
+										variant="bodySmall"
+										style={{ color: theme.colors.onSurfaceVariant }}
+									>
+										{activity.time}
+										{activity.participants &&
+											` • ${activity.participants} participants`}
+									</Text>
+								</View>
+							</View>
+						))
+					) : (
+						<Text
+							variant="bodyMedium"
+							style={[
+								styles.emptyText,
+								{ color: theme.colors.onSurfaceVariant },
+							]}
+						>
+							No recent activity. Start your kindness journey today!
+						</Text>
+					)}
+				</Card.Content>
+			</Card>
+
+			{/* Quick Actions */}
+			<Card
+				style={[styles.actionsCard, { backgroundColor: theme.colors.surface }]}
+			>
+				<Card.Content>
+					<Text
+						variant="titleMedium"
+						style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+					>
+						Quick Actions
+					</Text>
+
+					<View style={styles.actionButtons}>
+						<Button
+							mode="contained"
+							onPress={() => navigation.navigate("Quests")}
+							style={[
+								styles.actionButton,
+								{ backgroundColor: theme.colors.primary },
+							]}
+							icon="compass"
+						>
+							Find Quests
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={() => navigation.navigate("Rooms")}
+							style={styles.actionButton}
+							icon="account-group"
+						>
+							Join Room
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={() => navigation.navigate("Map")}
+							style={styles.actionButton}
+							icon="map-marker"
+						>
+							Explore Map
+						</Button>
+					</View>
+				</Card.Content>
+			</Card>
+		</ScrollView>
 	);
 }
+
+const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		padding: 16,
+	},
+	centered: {
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	welcomeCard: {
+		padding: 20,
+		marginBottom: 16,
+		borderRadius: 12,
+	},
+	greeting: {
+		fontWeight: "600",
+		marginBottom: 4,
+	},
+	subtitle: {
+		lineHeight: 20,
+	},
+	statsCard: {
+		marginBottom: 16,
+	},
+	sectionTitle: {
+		fontWeight: "600",
+		marginBottom: 16,
+	},
+	statsGrid: {
+		flexDirection: "row",
+		justifyContent: "space-around",
+		marginBottom: 24,
+	},
+	statItem: {
+		alignItems: "center",
+		flex: 1,
+	},
+	statNumber: {
+		fontWeight: "700",
+		marginTop: 8,
+		marginBottom: 4,
+	},
+	statLabel: {
+		fontSize: 12,
+	},
+	careScoreSection: {
+		marginTop: 8,
+	},
+	careScoreHeader: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		marginBottom: 8,
+	},
+	progressBar: {
+		height: 8,
+		borderRadius: 4,
+		marginBottom: 8,
+	},
+	progressText: {
+		textAlign: "center",
+		fontStyle: "italic",
+	},
+	activityCard: {
+		marginBottom: 16,
+	},
+	activityItem: {
+		flexDirection: "row",
+		alignItems: "center",
+		paddingVertical: 8,
+		borderBottomWidth: 1,
+		borderBottomColor: "rgba(0,0,0,0.05)",
+	},
+	activityIcon: {
+		marginRight: 12,
+	},
+	activityContent: {
+		flex: 1,
+	},
+	emptyText: {
+		textAlign: "center",
+		fontStyle: "italic",
+		paddingVertical: 16,
+	},
+	actionsCard: {
+		marginBottom: 32,
+	},
+	actionButtons: {
+		gap: 12,
+	},
+	actionButton: {
+		marginBottom: 8,
+	},
+});

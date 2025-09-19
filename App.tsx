@@ -57,19 +57,26 @@ const AppContent: React.FC = () => {
 		try {
 			console.log("🔍 Checking onboarding status for:", user.id);
 
-			// Check if user profile exists and has completed onboarding
-			const { data: profile, error } = await supabase
+			// First check if profile exists without using .single()
+			const { data: profiles, error } = await supabase
 				.from("users")
 				.select("*")
-				.eq("id", user.id)
-				.single();
+				.eq("id", user.id);
 
-			if (error && error.code !== "PGRST116") {
-				// PGRST116 = no rows returned
+			if (error) {
 				console.log("❌ Error checking profile:", error);
 				setAppState("onboarding");
 				return;
 			}
+
+			// Check if any profiles were returned
+			if (!profiles || profiles.length === 0) {
+				console.log("📝 No profile found - user needs onboarding");
+				setAppState("onboarding");
+				return;
+			}
+
+			const profile = profiles[0];
 
 			// Check if user has completed onboarding
 			const hasCompletedOnboarding =
@@ -132,29 +139,20 @@ const AppContent: React.FC = () => {
 			<StatusBar style={theme.dark ? "light" : "dark"} />
 			{appState === "auth" && <AuthNavigator />}
 			{appState === "onboarding" && (
-				<OnboardingScreen onComplete={handleOnboardingComplete} user={user} />
+				<OnboardingScreen user={user} onComplete={handleOnboardingComplete} />
 			)}
 			{appState === "main" && <MainNavigator />}
 		</NavigationContainer>
 	);
 };
 
-// Root App Component with ThemeProvider
+// Wrap the app with ThemeProvider
 export default function App() {
 	return (
 		<ThemeProvider>
-			<ThemedApp />
+			<PaperProvider>
+				<AppContent />
+			</PaperProvider>
 		</ThemeProvider>
 	);
 }
-
-// Wrapper to provide PaperProvider with theme
-const ThemedApp: React.FC = () => {
-	const { theme } = useTheme();
-
-	return (
-		<PaperProvider theme={theme}>
-			<AppContent />
-		</PaperProvider>
-	);
-};

@@ -109,10 +109,31 @@ export default function OnboardingScreen({
 		try {
 			console.log("💾 Saving onboarding data for user:", user.id);
 
-			// Simple update - just save the preferences
-			const { error } = await supabase
-				.from("users")
-				.update({
+			// Try using a database function to bypass RLS for profile creation
+			const { data, error } = await supabase.rpc("create_user_profile", {
+				p_user_id: user.id,
+				p_email: user.email,
+				p_display_name:
+					user.display_name || user.email?.split("@")[0] || "User",
+				p_faith_mode: faithMode,
+				p_bio: bio || null,
+				p_preferences: {
+					voice_comfort: voiceComfort,
+					video_comfort: videoComfort,
+					topics_to_avoid: selectedTopicsToAvoid,
+				},
+				p_care_score: 0,
+			});
+
+			if (error) {
+				// If the RPC function doesn't exist, fall back to direct upsert with service role
+				console.log("RPC function not found, trying direct upsert...");
+
+				const profileData = {
+					id: user.id,
+					email: user.email,
+					display_name:
+						user.display_name || user.email?.split("@")[0] || "User",
 					faith_mode: faithMode,
 					bio: bio || null,
 					preferences: {
@@ -120,12 +141,20 @@ export default function OnboardingScreen({
 						video_comfort: videoComfort,
 						topics_to_avoid: selectedTopicsToAvoid,
 					},
+					care_score: 0,
+					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
-				})
-				.eq("id", user.id);
+				};
 
-			if (error) {
-				throw new Error(`Failed to save profile: ${error.message}`);
+				const { error: upsertError } = await supabase
+					.from("users")
+					.upsert(profileData, {
+						onConflict: "id",
+					});
+
+				if (upsertError) {
+					throw new Error(`Failed to save profile: ${upsertError.message}`);
+				}
 			}
 
 			console.log("✅ Profile saved successfully");

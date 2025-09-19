@@ -183,6 +183,7 @@ export default function RoomDetailScreen({
 				},
 				messageItem: {
 					marginVertical: 4,
+					paddingHorizontal: 4,
 				},
 				ownMessage: {
 					alignItems: "flex-end",
@@ -193,13 +194,13 @@ export default function RoomDetailScreen({
 				ownMessageContent: {
 					maxWidth: "80%",
 					padding: 12,
-					borderRadius: 16,
+					borderRadius: 8,
 					backgroundColor: theme.colors.primary,
 				},
 				otherMessageContent: {
 					maxWidth: "80%",
 					padding: 12,
-					borderRadius: 16,
+					borderRadius: 8,
 					backgroundColor: theme.colors.surfaceVariant,
 				},
 				messageText: {
@@ -208,25 +209,30 @@ export default function RoomDetailScreen({
 				},
 				ownMessageText: {
 					color: theme.colors.onPrimary,
+					marginTop: 4,
 				},
 				otherMessageText: {
 					color: theme.colors.onSurface,
+					marginTop: 4,
 				},
-				messageTime: {
+				messageTimestamp: {
+					fontSize: 11,
+					marginTop: 4,
+					marginHorizontal: 8,
+				},
+				ownMessageTimestamp: {
 					fontSize: 11,
 					color: theme.colors.outline,
 					marginTop: 4,
+					marginHorizontal: 8,
+					textAlign: "right",
 				},
-				ownMessageTime: {
-					fontSize: 11,
-					color: theme.colors.onPrimary,
-					marginTop: 4,
-					opacity: 0.8,
-				},
-				otherMessageTime: {
+				otherMessageTimestamp: {
 					fontSize: 11,
 					color: theme.colors.outline,
 					marginTop: 4,
+					marginHorizontal: 8,
+					textAlign: "left",
 				},
 				emptyMessages: {
 					flex: 1,
@@ -974,15 +980,18 @@ export default function RoomDetailScreen({
 						>
 							{item.content}
 						</Text>
-						<Text
-							variant="labelSmall"
-							style={
-								isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
-							}
-						>
-							{formatMessageTime(item.timestamp)}
-						</Text>
 					</Surface>
+					<Text
+						variant="labelSmall"
+						style={[
+							styles.messageTimestamp,
+							isOwnMessage
+								? styles.ownMessageTimestamp
+								: styles.otherMessageTimestamp,
+						]}
+					>
+						{formatMessageTime(item.timestamp)}
+					</Text>
 				</View>
 			);
 		},
