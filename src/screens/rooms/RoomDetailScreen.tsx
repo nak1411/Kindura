@@ -1,31 +1,45 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+	useState,
+	useEffect,
+	useCallback,
+	useRef,
+	useMemo,
+} from "react";
 import {
 	View,
 	StyleSheet,
-	ScrollView,
-	Alert,
-	Animated,
-	KeyboardAvoidingView,
-	Platform,
 	FlatList,
 	AppState,
 	AppStateStatus,
+	KeyboardAvoidingView,
+	Platform,
+	Alert,
+	Animated,
+	RefreshControl,
 } from "react-native";
 import {
 	Text,
-	Card,
-	Button,
-	Avatar,
-	IconButton,
 	Surface,
-	ProgressBar,
+	IconButton,
+	Avatar,
 	TextInput,
-	Chip,
 	Snackbar,
 } from "react-native-paper";
 import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
 import { ParallelRoom, User } from "../../types";
+
+interface RoomMessage {
+	id: string;
+	room_id: string;
+	user_id: string;
+	content: string;
+	message_type: "text" | "gentle_nudge" | "reflection" | "presence_update";
+	created_at: string;
+	timestamp: string;
+	user_name: string;
+	users?: { display_name: string };
+}
 
 interface RoomDetailScreenProps {
 	route: {
@@ -36,106 +50,233 @@ interface RoomDetailScreenProps {
 	navigation: any;
 }
 
-interface RoomParticipant {
-	id: string;
-	display_name: string;
-	care_score: number;
-	preferences: User["preferences"];
-}
-
-interface RoomMessage {
-	id: string;
-	room_id: string;
-	user_id: string;
-	content: string;
-	message_type: "text" | "nudge" | "system";
-	created_at: string;
-	timestamp?: string;
-	user_name?: string;
-}
-
-interface ConnectionStatus {
-	isConnected: boolean;
-	lastCheck: Date;
-	retryCount: number;
-}
-
 export default function RoomDetailScreen({
 	route,
 	navigation,
 }: RoomDetailScreenProps) {
 	const { roomId } = route.params;
-	const [room, setRoom] = useState<ParallelRoom | null>(null);
+	const { theme } = useTheme();
+
+	// Core state
+	const [loading, setLoading] = useState(true);
 	const [user, setUser] = useState<User | null>(null);
-	const [participants, setParticipants] = useState<RoomParticipant[]>([]);
+	const [room, setRoom] = useState<ParallelRoom | null>(null);
+	const [participants, setParticipants] = useState<
+		Array<{ id: string; display_name: string; care_score: number }>
+	>([]);
+	const participantsRef = useRef<
+		Array<{ id: string; display_name: string; care_score: number }>
+	>([]);
+
+	// Message state
 	const [messages, setMessages] = useState<RoomMessage[]>([]);
 	const [newMessage, setNewMessage] = useState("");
-	const [presenceTimer, setPresenceTimer] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-		isConnected: true,
+	const [isRetrying, setIsRetrying] = useState(false);
+	const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+	const [refreshing, setRefreshing] = useState(false);
+
+	// Connection state
+	const [connectionStatus, setConnectionStatus] = useState({
+		isConnected: false,
 		lastCheck: new Date(),
 		retryCount: 0,
 	});
-	const [isRetrying, setIsRetrying] = useState(false);
 	const [showConnectionError, setShowConnectionError] = useState(false);
-	const [lastMessageId, setLastMessageId] = useState<string | null>(null);
 
-	const { theme } = useTheme();
+	// Presence state
+	const [presenceTimer, setPresenceTimer] = useState(0);
+	const presenceAnimation = useRef(new Animated.Value(0.5)).current;
 
 	// Refs
-	const presenceAnimation = useRef(new Animated.Value(0)).current;
-	const presenceInterval = useRef<NodeJS.Timeout | null>(null);
 	const messagesListRef = useRef<FlatList>(null);
-	const messageRefreshInterval = useRef<NodeJS.Timeout | null>(null);
-	const connectionCheckInterval = useRef<NodeJS.Timeout | null>(null);
 	const realtimeSubscription = useRef<any>(null);
+	const presenceInterval = useRef<NodeJS.Timeout | null>(null);
 	const appStateRef = useRef(AppState.currentState);
 
-	// Connection monitoring
-	const checkConnection = useCallback(async () => {
-		try {
-			const { error } = await supabase
-				.from("parallel_rooms")
-				.select("id")
-				.eq("id", roomId)
-				.single();
-
-			const isConnected = !error;
-
-			setConnectionStatus((prev) => ({
-				...prev,
-				isConnected,
-				lastCheck: new Date(),
-				retryCount: isConnected ? 0 : prev.retryCount + 1,
-			}));
-
-			if (!isConnected && connectionStatus.retryCount < 3) {
-				setShowConnectionError(true);
-				// Attempt to reconnect real-time subscription
-				reconnectRealtime();
-			}
-
-			return isConnected;
-		} catch (error) {
-			console.error("Connection check failed:", error);
-			setConnectionStatus((prev) => ({
-				...prev,
-				isConnected: false,
-				lastCheck: new Date(),
-				retryCount: prev.retryCount + 1,
-			}));
-			return false;
-		}
-	}, [roomId, connectionStatus.retryCount]);
-
-	// Reconnect real-time subscription
-	const reconnectRealtime = useCallback(() => {
-		if (realtimeSubscription.current) {
-			realtimeSubscription.current.unsubscribe();
-		}
-		setupRealtimeSubscription();
-	}, []);
+	// Styles
+	const styles = useMemo(
+		() =>
+			StyleSheet.create({
+				container: {
+					flex: 1,
+					backgroundColor: theme.colors.background,
+				},
+				header: {
+					backgroundColor: theme.colors.surface,
+					elevation: 4,
+					paddingTop: 40,
+					paddingBottom: 16,
+					paddingHorizontal: 16,
+				},
+				headerContent: {
+					flexDirection: "row",
+					justifyContent: "space-between",
+					alignItems: "center",
+				},
+				backButton: {
+					margin: 0,
+				},
+				headerCenter: {
+					flex: 1,
+					alignItems: "center",
+				},
+				roomTitle: {
+					color: theme.colors.primary,
+					fontWeight: "bold",
+				},
+				presenceTime: {
+					color: theme.colors.outline,
+					marginTop: 4,
+				},
+				scrollContent: {
+					flex: 1,
+				},
+				participantsSection: {
+					backgroundColor: theme.colors.surface,
+					paddingHorizontal: 16,
+					paddingVertical: 8,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				participantsContent: {
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "space-between",
+				},
+				participantsLabel: {
+					color: theme.colors.primary,
+					fontWeight: "500",
+				},
+				infoSection: {
+					padding: 16,
+				},
+				participantsCard: {
+					marginBottom: 16,
+					backgroundColor: theme.colors.surface,
+				},
+				sectionTitle: {
+					color: theme.colors.primary,
+					fontWeight: "bold",
+					marginBottom: 12,
+				},
+				participantsList: {
+					flexDirection: "row",
+					flexWrap: "wrap",
+					gap: 4,
+				},
+				participantAvatar: {
+					backgroundColor: theme.colors.primaryContainer,
+				},
+				messagesContainer: {
+					flex: 1,
+					backgroundColor: theme.colors.surface,
+				},
+				messagesHeader: {
+					padding: 16,
+					paddingBottom: 8,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				messagesList: {
+					flex: 1,
+					paddingHorizontal: 16,
+				},
+				messageItem: {
+					marginVertical: 4,
+				},
+				ownMessage: {
+					alignItems: "flex-end",
+				},
+				otherMessage: {
+					alignItems: "flex-start",
+				},
+				ownMessageContent: {
+					maxWidth: "80%",
+					padding: 12,
+					borderRadius: 16,
+					backgroundColor: theme.colors.primary,
+				},
+				otherMessageContent: {
+					maxWidth: "80%",
+					padding: 12,
+					borderRadius: 16,
+					backgroundColor: theme.colors.surfaceVariant,
+				},
+				messageText: {
+					color: theme.colors.onSurface,
+					marginTop: 4,
+				},
+				ownMessageText: {
+					color: theme.colors.onPrimary,
+				},
+				otherMessageText: {
+					color: theme.colors.onSurface,
+				},
+				messageTime: {
+					fontSize: 11,
+					color: theme.colors.outline,
+					marginTop: 4,
+				},
+				ownMessageTime: {
+					fontSize: 11,
+					color: theme.colors.onPrimary,
+					marginTop: 4,
+					opacity: 0.8,
+				},
+				otherMessageTime: {
+					fontSize: 11,
+					color: theme.colors.outline,
+					marginTop: 4,
+				},
+				emptyMessages: {
+					flex: 1,
+					justifyContent: "center",
+					alignItems: "center",
+					padding: 32,
+				},
+				emptyText: {
+					color: theme.colors.outline,
+					textAlign: "center",
+					marginTop: 16,
+				},
+				inputContainer: {
+					margin: 16,
+					marginTop: 8,
+					backgroundColor: theme.colors.surface,
+				},
+				messageInput: {
+					backgroundColor: theme.colors.surface,
+				},
+				connectionSection: {
+					paddingHorizontal: 16,
+					paddingVertical: 8,
+					backgroundColor: theme.colors.surface,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				connectionContent: {
+					flexDirection: "row",
+					alignItems: "center",
+					gap: 8,
+				},
+				connectionIndicator: {
+					width: 8,
+					height: 8,
+					borderRadius: 4,
+				},
+				connected: {
+					backgroundColor: theme.colors.primary,
+				},
+				disconnected: {
+					backgroundColor: theme.colors.error,
+				},
+				connectionText: {
+					color: theme.colors.outline,
+					fontSize: 12,
+				},
+			}),
+		[theme]
+	);
 
 	// Setup real-time subscription with error handling
 	const setupRealtimeSubscription = useCallback(() => {
@@ -165,6 +306,8 @@ export default function RoomDetailScreen({
 				(payload: any) => {
 					console.log("Room updated:", payload.new);
 					setRoom(payload.new as ParallelRoom);
+					// When room updates (like new user joining), refresh participants
+					loadParticipants(payload.new as ParallelRoom);
 				}
 			)
 			.subscribe((status: string) => {
@@ -185,40 +328,207 @@ export default function RoomDetailScreen({
 		realtimeSubscription.current = subscription;
 	}, [roomId]);
 
+	// Load participants helper function
+	const loadParticipants = useCallback(async (roomData: ParallelRoom) => {
+		if (roomData.current_participants.length > 0) {
+			const { data: participantsData } = await supabase
+				.from("users")
+				.select("id, display_name, care_score, preferences")
+				.in("id", roomData.current_participants);
+
+			const participantsList = participantsData || [];
+			setParticipants(participantsList);
+			// Update ref immediately
+			participantsRef.current = participantsList;
+			console.log("Updated participants:", participantsList);
+		} else {
+			setParticipants([]);
+			participantsRef.current = [];
+		}
+	}, []);
+
+	// Reconnect real-time subscription
+	const reconnectRealtime = useCallback(() => {
+		if (realtimeSubscription.current) {
+			realtimeSubscription.current.unsubscribe();
+		}
+
+		// Recreate the subscription
+		const subscription = supabase
+			.channel(`room_${roomId}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "room_messages",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload: any) => {
+					console.log("New message received:", payload.new);
+					handleNewMessage(payload.new as RoomMessage);
+				}
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "parallel_rooms",
+					filter: `id=eq.${roomId}`,
+				},
+				(payload: any) => {
+					console.log("Room updated:", payload.new);
+					setRoom(payload.new as ParallelRoom);
+					// When room updates (like new user joining), refresh participants
+					loadParticipants(payload.new as ParallelRoom);
+				}
+			)
+			.subscribe((status: string) => {
+				console.log("Subscription status:", status);
+				if (status === "SUBSCRIBED") {
+					setConnectionStatus((prev) => ({
+						...prev,
+						isConnected: true,
+						retryCount: 0,
+					}));
+					setShowConnectionError(false);
+				} else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+					setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
+					setShowConnectionError(true);
+				}
+			});
+
+		realtimeSubscription.current = subscription;
+	}, [roomId]);
+
+	// Check connection status
+	const checkConnection = useCallback(async () => {
+		try {
+			const { data, error } = await supabase
+				.from("parallel_rooms")
+				.select("id")
+				.eq("id", roomId)
+				.single();
+
+			const isConnected = !error && !!data;
+
+			setConnectionStatus((prev) => ({
+				...prev,
+				isConnected,
+				lastCheck: new Date(),
+				retryCount: isConnected ? 0 : prev.retryCount + 1,
+			}));
+
+			if (!isConnected) {
+				setShowConnectionError(true);
+				// Attempt to reconnect real-time subscription
+				reconnectRealtime();
+			} else {
+				setShowConnectionError(false);
+			}
+
+			return isConnected;
+		} catch (error) {
+			console.error("Connection check failed:", error);
+			setConnectionStatus((prev) => ({
+				...prev,
+				isConnected: false,
+				lastCheck: new Date(),
+				retryCount: prev.retryCount + 1,
+			}));
+			setShowConnectionError(true);
+			return false;
+		}
+	}, [roomId, reconnectRealtime]);
+
+	// Pull to refresh handler
+	const onRefresh = useCallback(async () => {
+		setRefreshing(true);
+		try {
+			await refreshMessages();
+		} finally {
+			setRefreshing(false);
+		}
+	}, []);
+
 	// Handle new incoming messages
 	const handleNewMessage = useCallback((newMsg: RoomMessage) => {
-		setMessages((prev) => {
-			// Check if message already exists to prevent duplicates
-			const exists = prev.some((msg) => msg.id === newMsg.id);
-			if (exists) return prev;
+		// For real-time messages, fetch user name immediately and then add to messages
+		const addMessageWithUserName = async () => {
+			try {
+				console.log("Fetching user name for user_id:", newMsg.user_id);
 
-			const updated = [
-				...prev,
-				{
-					...newMsg,
-					timestamp: newMsg.created_at,
-					user_name: newMsg.user_name || "Anonymous",
-				},
-			].sort(
-				(a, b) =>
-					new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-			);
+				// Fetch the user's display name from the database
+				const { data: userData, error } = await supabase
+					.from("users")
+					.select("display_name")
+					.eq("id", newMsg.user_id)
+					.single();
 
-			setLastMessageId(newMsg.id);
+				if (error) {
+					console.error("Error fetching user data:", error);
+				}
 
-			// Auto-scroll to bottom for new messages
-			setTimeout(() => {
-				messagesListRef.current?.scrollToEnd({ animated: true });
-			}, 100);
+				const user_name = userData?.display_name || "Anonymous";
+				console.log("Found user name:", user_name);
 
-			return updated;
-		});
+				setMessages((prev) => {
+					// Check if message already exists to prevent duplicates
+					const exists = prev.some((msg) => msg.id === newMsg.id);
+					if (exists) return prev;
+
+					const updated = [
+						...prev,
+						{
+							...newMsg,
+							timestamp: newMsg.created_at,
+							user_name: user_name,
+						},
+					].sort(
+						(a, b) =>
+							new Date(a.created_at).getTime() -
+							new Date(b.created_at).getTime()
+					);
+
+					setLastMessageId(newMsg.id);
+
+					// Auto-scroll to bottom for new messages
+					setTimeout(() => {
+						messagesListRef.current?.scrollToEnd({ animated: true });
+					}, 100);
+
+					return updated;
+				});
+			} catch (error) {
+				console.error("Error fetching user name for message:", error);
+				// Fallback: add message with Anonymous if user fetch fails
+				setMessages((prev) => {
+					const exists = prev.some((msg) => msg.id === newMsg.id);
+					if (exists) return prev;
+
+					return [
+						...prev,
+						{
+							...newMsg,
+							timestamp: newMsg.created_at,
+							user_name: "Anonymous",
+						},
+					].sort(
+						(a, b) =>
+							new Date(a.created_at).getTime() -
+							new Date(b.created_at).getTime()
+					);
+				});
+			}
+		};
+
+		// Execute the async function
+		addMessageWithUserName();
 	}, []);
 
 	// Periodic message refresh
 	const refreshMessages = useCallback(async () => {
-		if (!connectionStatus.isConnected) return;
-
 		try {
 			const { data, error } = await supabase
 				.from("room_messages")
@@ -230,18 +540,45 @@ export default function RoomDetailScreen({
 				)
 				.eq("room_id", roomId)
 				.order("created_at", { ascending: true })
-				.limit(100); // Increased limit to get more message history
+				.limit(100);
 
 			if (error) throw error;
 
-			const formattedMessages =
-				data?.map((msg) => ({
-					...msg,
-					timestamp: msg.created_at,
-					user_name: msg.users?.display_name || "Anonymous",
-				})) || [];
+			// Process messages and handle missing user data
+			const formattedMessages = await Promise.all(
+				(data || []).map(async (msg) => {
+					let user_name = msg.users?.display_name;
 
-			// Always update messages to ensure we have the latest data
+					// If join failed, try direct lookup
+					if (!user_name) {
+						try {
+							const { data: userData } = await supabase
+								.from("users")
+								.select("display_name")
+								.eq("id", msg.user_id)
+								.single();
+
+							user_name = userData?.display_name || "Anonymous";
+						} catch (userError) {
+							user_name = "Anonymous";
+						}
+					}
+
+					return {
+						...msg,
+						timestamp: msg.created_at,
+						user_name: user_name,
+					};
+				})
+			);
+
+			// Check if there are new messages by comparing with current state
+			const hasNewMessages =
+				formattedMessages.length > messages.length ||
+				(formattedMessages.length > 0 &&
+					formattedMessages[formattedMessages.length - 1]?.id !==
+						lastMessageId);
+
 			setMessages(formattedMessages);
 
 			if (formattedMessages.length > 0) {
@@ -249,16 +586,20 @@ export default function RoomDetailScreen({
 					formattedMessages[formattedMessages.length - 1]?.id;
 				setLastMessageId(latestMessageId);
 
-				// Auto-scroll to bottom after refresh
-				setTimeout(() => {
-					messagesListRef.current?.scrollToEnd({ animated: true });
-				}, 100);
+				// Only auto-scroll if there are new messages
+				if (hasNewMessages) {
+					setTimeout(() => {
+						messagesListRef.current?.scrollToEnd({ animated: true });
+					}, 100);
+				}
 			}
+
+			setConnectionStatus((prev) => ({ ...prev, isConnected: true }));
 		} catch (error) {
 			console.error("Error refreshing messages:", error);
 			setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
 		}
-	}, [roomId, connectionStatus.isConnected]);
+	}, [roomId, messages.length, lastMessageId]);
 
 	// Retry mechanism for sending messages
 	const sendMessageWithRetry = useCallback(
@@ -428,6 +769,41 @@ export default function RoomDetailScreen({
 
 			if (error) throw error;
 
+			// Clean up invalid participant IDs (users that no longer exist)
+			if (roomData.current_participants.length > 0) {
+				const { data: validUsers } = await supabase
+					.from("users")
+					.select("id")
+					.in("id", roomData.current_participants);
+
+				const validUserIds = validUsers?.map((u) => u.id) || [];
+				const invalidUserIds = roomData.current_participants.filter(
+					(id: string) => !validUserIds.includes(id)
+				);
+
+				// If there are invalid users, clean them up
+				if (invalidUserIds.length > 0) {
+					console.log("Cleaning up invalid participant IDs:", invalidUserIds);
+
+					const cleanedParticipants = roomData.current_participants.filter(
+						(id: string) => validUserIds.includes(id)
+					);
+
+					// Update the room with cleaned participants
+					const { error: cleanupError } = await supabase
+						.from("parallel_rooms")
+						.update({ current_participants: cleanedParticipants })
+						.eq("id", roomId);
+
+					if (!cleanupError) {
+						roomData.current_participants = cleanedParticipants;
+						console.log("Successfully cleaned up room participants");
+					} else {
+						console.error("Failed to cleanup participants:", cleanupError);
+					}
+				}
+			}
+
 			// Auto-join room if user is not in participants list
 			if (userData && !roomData.current_participants.includes(userData.id)) {
 				console.log("User not in room, auto-joining...");
@@ -454,15 +830,10 @@ export default function RoomDetailScreen({
 
 			setRoom(roomData);
 
-			if (roomData.current_participants.length > 0) {
-				const { data: participantsData } = await supabase
-					.from("users")
-					.select("id, display_name, care_score, preferences")
-					.in("id", roomData.current_participants);
+			// Load participants using the helper function
+			await loadParticipants(roomData);
 
-				setParticipants(participantsData || []);
-			}
-
+			// Load messages after participants are set
 			await refreshMessages();
 		} catch (error) {
 			console.error("Error loading room:", error);
@@ -505,12 +876,17 @@ export default function RoomDetailScreen({
 				(id) => id !== user.id
 			);
 
-			await supabase
+			const { error } = await supabase
 				.from("parallel_rooms")
 				.update({ current_participants: updatedParticipants })
 				.eq("id", roomId);
+
+			if (error) {
+				throw error;
+			}
 		} catch (error) {
 			console.error("Error leaving room:", error);
+			throw error;
 		}
 	}, [user, room, roomId]);
 
@@ -524,8 +900,13 @@ export default function RoomDetailScreen({
 				text: "Leave",
 				style: "destructive",
 				onPress: async () => {
-					await leaveRoom();
-					navigation.goBack();
+					try {
+						await leaveRoom();
+						navigation.goBack();
+					} catch (error) {
+						console.error("Error in handleLeaveRoom:", error);
+						Alert.alert("Error", "Failed to leave room");
+					}
 				},
 			},
 		]);
@@ -568,228 +949,115 @@ export default function RoomDetailScreen({
 						isOwnMessage ? styles.ownMessage : styles.otherMessage,
 					]}
 				>
-					<Surface style={styles.messageContent}>
-						<Text variant="labelSmall" style={{ color: theme.colors.primary }}>
-							{isOwnMessage ? "You" : item.user_name || "Anonymous"}
+					<Surface
+						style={
+							isOwnMessage
+								? styles.ownMessageContent
+								: styles.otherMessageContent
+						}
+					>
+						<Text
+							variant="labelSmall"
+							style={{
+								color: isOwnMessage
+									? theme.colors.onPrimary
+									: theme.colors.primary,
+							}}
+						>
+							{isOwnMessage ? "You" : item.user_name}
 						</Text>
-						<Text style={styles.messageText}>{item.content}</Text>
-						<Text style={styles.messageTime}>
-							{formatMessageTime(item.timestamp || item.created_at)}
+						<Text
+							variant="bodyMedium"
+							style={
+								isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+							}
+						>
+							{item.content}
+						</Text>
+						<Text
+							variant="labelSmall"
+							style={
+								isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
+							}
+						>
+							{formatMessageTime(item.timestamp)}
 						</Text>
 					</Surface>
 				</View>
 			);
 		},
-		[user?.id, theme.colors.primary, formatMessageTime]
+		[user, theme, styles, formatMessageTime]
 	);
 
-	// Main useEffect
+	// Update participants ref when participants change
+	useEffect(() => {
+		participantsRef.current = participants;
+	}, [participants]);
+
+	// Initialize component
 	useEffect(() => {
 		loadRoomData();
 		startPresenceTimer();
-		setupRealtimeSubscription();
 
-		// Set up intervals
-		messageRefreshInterval.current = setInterval(refreshMessages, 15000); // Refresh every 15 seconds (more frequent)
-		connectionCheckInterval.current = setInterval(checkConnection, 30000); // Check connection every 30 seconds
-
-		// App state listener
 		const subscription = AppState.addEventListener(
 			"change",
 			handleAppStateChange
 		);
 
 		return () => {
-			// Cleanup
-			if (presenceInterval.current) {
-				clearInterval(presenceInterval.current);
-			}
-			if (messageRefreshInterval.current) {
-				clearInterval(messageRefreshInterval.current);
-			}
-			if (connectionCheckInterval.current) {
-				clearInterval(connectionCheckInterval.current);
-			}
+			subscription?.remove();
 			if (realtimeSubscription.current) {
 				realtimeSubscription.current.unsubscribe();
 			}
-			subscription?.remove();
+			if (presenceInterval.current) {
+				clearInterval(presenceInterval.current);
+			}
 			leaveRoom();
 		};
 	}, []);
 
-	// Styles
-	const styles = StyleSheet.create({
-		container: {
-			flex: 1,
-			backgroundColor: theme.colors.background,
-		},
-		loadingContainer: {
-			flex: 1,
-			justifyContent: "center",
-			alignItems: "center",
-			backgroundColor: theme.colors.background,
-		},
-		header: {
-			backgroundColor: theme.colors.surface,
-			elevation: 4,
-			paddingTop: 40,
-			paddingBottom: 16,
-			paddingHorizontal: 16,
-		},
-		headerContent: {
-			flexDirection: "row",
-			justifyContent: "space-between",
-			alignItems: "center",
-		},
-		backButton: {
-			margin: 0,
-		},
-		headerCenter: {
-			flex: 1,
-			alignItems: "center",
-		},
-		roomTitle: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-		},
-		presenceTime: {
-			color: theme.colors.outline,
-			marginTop: 4,
-		},
-		scrollContent: {
-			flex: 1,
-		},
-		participantsSection: {
-			backgroundColor: theme.colors.surface,
-			paddingHorizontal: 16,
-			paddingVertical: 8,
-			borderBottomWidth: 1,
-			borderBottomColor: theme.colors.outline + "20",
-		},
-		participantsContent: {
-			flexDirection: "row",
-			alignItems: "center",
-			justifyContent: "space-between",
-		},
-		participantsLabel: {
-			color: theme.colors.primary,
-			fontWeight: "500",
-		},
-		infoSection: {
-			padding: 16,
-		},
-		participantsCard: {
-			marginBottom: 16,
-			backgroundColor: theme.colors.surface,
-		},
-		sectionTitle: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-			marginBottom: 12,
-		},
-		participantsList: {
-			flexDirection: "row",
-			flexWrap: "wrap",
-			gap: 4,
-		},
-		participantAvatar: {
-			backgroundColor: theme.colors.primaryContainer,
-		},
-		messagesContainer: {
-			flex: 1,
-			backgroundColor: theme.colors.surface,
-		},
-		messagesHeader: {
-			padding: 16,
-			paddingBottom: 8,
-			borderBottomWidth: 1,
-			borderBottomColor: theme.colors.outline + "20",
-		},
-		messagesList: {
-			flex: 1,
-			paddingHorizontal: 16,
-		},
-		messageItem: {
-			marginVertical: 4,
-		},
-		ownMessage: {
-			alignItems: "flex-end",
-		},
-		otherMessage: {
-			alignItems: "flex-start",
-		},
-		messageContent: {
-			maxWidth: "80%",
-			padding: 12,
-			borderRadius: 12,
-			backgroundColor: theme.colors.surfaceVariant,
-		},
-		messageText: {
-			color: theme.colors.onSurface,
-			marginVertical: 4,
-		},
-		messageTime: {
-			color: theme.colors.outline,
-			fontSize: 12,
-			marginTop: 4,
-		},
-		inputContainer: {
-			padding: 16,
-			backgroundColor: theme.colors.surface,
-			borderTopWidth: 1,
-			borderTopColor: theme.colors.outline + "20",
-		},
-		messageInput: {
-			backgroundColor: theme.colors.background,
-		},
-		emptyMessages: {
-			flex: 1,
-			justifyContent: "center",
-			alignItems: "center",
-			padding: 32,
-		},
-		emptyText: {
-			color: theme.colors.outline,
-			textAlign: "center",
-			marginTop: 16,
-		},
-		connectionStatus: {
-			flexDirection: "row",
-			alignItems: "center",
-			paddingHorizontal: 16,
-			paddingVertical: 8,
-		},
-		connectionIndicator: {
-			width: 8,
-			height: 8,
-			borderRadius: 4,
-			marginRight: 8,
-		},
-		connected: {
-			backgroundColor: "#4CAF50",
-		},
-		disconnected: {
-			backgroundColor: "#F44336",
-		},
-		connectionText: {
-			fontSize: 12,
-			color: theme.colors.outline,
-		},
-	});
+	// Force refresh messages after initial load
+	useEffect(() => {
+		if (!loading && roomId) {
+			setTimeout(() => {
+				refreshMessages();
+			}, 1000);
+		}
+	}, [loading, roomId, refreshMessages]);
+
+	// Connection monitoring
+	useEffect(() => {
+		const interval = setInterval(() => {
+			checkConnection();
+		}, 30000); // Check every 30 seconds
+		return () => clearInterval(interval);
+	}, [roomId, checkConnection]);
+
+	// Periodic message refresh
+	useEffect(() => {
+		const interval = setInterval(() => {
+			refreshMessages();
+		}, 10000); // Refresh messages every 10 seconds
+		return () => clearInterval(interval);
+	}, [roomId, refreshMessages]);
+
+	// Setup realtime subscription when room loads
+	useEffect(() => {
+		if (roomId && !loading) {
+			setupRealtimeSubscription();
+		}
+
+		return () => {
+			if (realtimeSubscription.current) {
+				realtimeSubscription.current.unsubscribe();
+			}
+		};
+	}, [roomId, loading, setupRealtimeSubscription]);
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<Text>Loading room...</Text>
-			</View>
-		);
-	}
-
-	if (!room) {
-		return (
-			<View style={styles.loadingContainer}>
-				<Text>Room not found</Text>
+			<View style={[styles.container, { justifyContent: "center" }]}>
+				<Text>Loading...</Text>
 			</View>
 		);
 	}
@@ -804,29 +1072,32 @@ export default function RoomDetailScreen({
 				<View style={styles.headerContent}>
 					<IconButton
 						icon="arrow-left"
+						size={24}
 						onPress={() => navigation.goBack()}
 						style={styles.backButton}
 					/>
 					<View style={styles.headerCenter}>
-						<Text variant="headlineSmall" style={styles.roomTitle}>
-							{room.name}
+						<Text variant="titleMedium" style={styles.roomTitle}>
+							{room?.name || "Room"}
 						</Text>
-						<Text variant="bodySmall" style={styles.presenceTime}>
-							Present for {formatPresenceTime(presenceTimer)}
-						</Text>
+						<Animated.View style={{ opacity: presenceAnimation }}>
+							<Text variant="bodySmall" style={styles.presenceTime}>
+								Present: {formatPresenceTime(presenceTimer)}
+							</Text>
+						</Animated.View>
 					</View>
-					<Button
-						mode="outlined"
+					<IconButton
+						icon="exit-to-app"
+						size={24}
 						onPress={handleLeaveRoom}
-						compact
-						style={{ borderRadius: 8 }}
-					>
-						Leave
-					</Button>
+						style={styles.backButton}
+					/>
 				</View>
+			</Surface>
 
-				{/* Connection Status Indicator */}
-				<View style={styles.connectionStatus}>
+			{/* Connection Status */}
+			<Surface style={styles.connectionSection}>
+				<View style={styles.connectionContent}>
 					<View
 						style={[
 							styles.connectionIndicator,
@@ -879,6 +1150,9 @@ export default function RoomDetailScreen({
 						style={styles.messagesList}
 						contentContainerStyle={{ paddingVertical: 16 }}
 						showsVerticalScrollIndicator={false}
+						refreshControl={
+							<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+						}
 					/>
 				) : (
 					<View style={styles.emptyMessages}>

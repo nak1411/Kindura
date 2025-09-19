@@ -108,6 +108,79 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		}
 	};
 
+	// Clean up orphaned participant IDs across all rooms
+	const cleanupRoomParticipants = async (roomsData: ParallelRoom[]) => {
+		const roomsNeedingCleanup: Array<{
+			id: string;
+			cleanedParticipants: string[];
+			invalidCount: number;
+		}> = [];
+
+		for (const room of roomsData) {
+			if (room.current_participants.length > 0) {
+				// Check which participant IDs actually exist
+				const { data: validUsers } = await supabase
+					.from("users")
+					.select("id")
+					.in("id", room.current_participants);
+
+				const validUserIds = validUsers?.map((u) => u.id) || [];
+				const invalidUserIds = room.current_participants.filter(
+					(id: string) => !validUserIds.includes(id)
+				);
+
+				// If there are invalid users, add to cleanup list
+				if (invalidUserIds.length > 0) {
+					const cleanedParticipants = room.current_participants.filter(
+						(id: string) => validUserIds.includes(id)
+					);
+
+					roomsNeedingCleanup.push({
+						id: room.id,
+						cleanedParticipants,
+						invalidCount: invalidUserIds.length,
+					});
+				}
+			}
+		}
+
+		// Batch update all rooms that need cleanup
+		if (roomsNeedingCleanup.length > 0) {
+			console.log(
+				`Cleaning up participants in ${roomsNeedingCleanup.length} rooms`
+			);
+
+			for (const roomUpdate of roomsNeedingCleanup) {
+				try {
+					await supabase
+						.from("parallel_rooms")
+						.update({ current_participants: roomUpdate.cleanedParticipants })
+						.eq("id", roomUpdate.id);
+
+					console.log(
+						`Removed ${roomUpdate.invalidCount} invalid participants from room ${roomUpdate.id}`
+					);
+				} catch (error) {
+					console.error(`Failed to cleanup room ${roomUpdate.id}:`, error);
+				}
+			}
+
+			// Return cleaned rooms data
+			return roomsData.map((room) => {
+				const cleanupInfo = roomsNeedingCleanup.find((c) => c.id === room.id);
+				if (cleanupInfo) {
+					return {
+						...room,
+						current_participants: cleanupInfo.cleanedParticipants,
+					};
+				}
+				return room;
+			});
+		}
+
+		return roomsData;
+	};
+
 	const loadRooms = async () => {
 		setLoading(true);
 		try {
@@ -127,11 +200,16 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 
 			if (error) throw error;
 
-			setRooms(data || []);
+			let roomsData = data || [];
+
+			// Clean up orphaned participants before displaying
+			roomsData = await cleanupRoomParticipants(roomsData);
+
+			setRooms(roomsData);
 
 			// Check if user is in any room
-			if (user && data) {
-				const userRoom = data.find((room) =>
+			if (user && roomsData) {
+				const userRoom = roomsData.find((room) =>
 					room.current_participants.includes(user.id)
 				);
 				setJoinedRoom(userRoom?.id || null);
@@ -397,31 +475,26 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		},
 		header: {
 			backgroundColor: theme.colors.surface,
-			elevation: 4,
-			paddingTop: 40,
-			paddingBottom: 16,
-			paddingHorizontal: 16,
+			paddingTop: 50,
+			paddingBottom: 20,
+			paddingHorizontal: 20,
+			elevation: 2,
 		},
 		title: {
 			color: theme.colors.primary,
 			fontWeight: "bold",
 		},
 		subtitle: {
-			color: theme.colors.outline,
+			color: theme.colors.onSurfaceVariant,
 			marginTop: 4,
 		},
-		listContent: {
-			padding: 16,
-			paddingBottom: 80, // Space for FAB
-		},
 		roomCard: {
-			marginBottom: 16,
+			margin: 16,
+			marginBottom: 8,
 			elevation: 2,
-			borderRadius: 4,
 		},
 		activeRoomCard: {
 			borderWidth: 2,
-			elevation: 4,
 		},
 		roomHeader: {
 			flexDirection: "row",
@@ -431,46 +504,44 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		},
 		roomTitle: {
 			flex: 1,
+			marginRight: 8,
 		},
 		occupancyInfo: {
 			paddingHorizontal: 8,
 			paddingVertical: 4,
-			borderRadius: 8,
+			borderRadius: 12,
 		},
 		occupancyText: {
 			fontSize: 12,
+			fontWeight: "bold",
 		},
 		roomDescription: {
 			marginBottom: 12,
-			lineHeight: 20,
 		},
 		occupancyBar: {
-			marginBottom: 16,
 			height: 4,
+			marginBottom: 12,
 		},
 		roomFooter: {
 			flexDirection: "row",
 			justifyContent: "space-between",
 			alignItems: "center",
 		},
-		roomTags: {
-			flexDirection: "row",
-			gap: 8,
-		},
 		roomActions: {
 			flexDirection: "row",
-			gap: 8,
+			flex: 1,
 		},
 		fab: {
 			position: "absolute",
-			margin: 16,
-			right: 0,
-			bottom: 0,
+			right: 16,
+			bottom: 16,
 			backgroundColor: theme.colors.primary,
-			borderRadius: 8,
 		},
-		modal: {
-			margin: 20,
+		modalContainer: {
+			backgroundColor: "rgba(0, 0, 0, 0.5)",
+			flex: 1,
+			justifyContent: "center",
+			padding: 20,
 		},
 		modalContent: {
 			backgroundColor: theme.colors.surface,
@@ -547,13 +618,9 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				data={rooms}
 				renderItem={renderRoom}
 				keyExtractor={(item) => item.id}
-				contentContainerStyle={styles.listContent}
+				contentContainerStyle={{ paddingBottom: 80 }}
 				refreshControl={
-					<RefreshControl
-						refreshing={refreshing}
-						onRefresh={onRefresh}
-						colors={[theme.colors.primary]}
-					/>
+					<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
 				}
 				showsVerticalScrollIndicator={false}
 			/>
@@ -563,7 +630,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				icon="plus"
 				style={styles.fab}
 				onPress={() => setShowCreateModal(true)}
-				label="Create Room"
 			/>
 
 			{/* Create Room Modal */}
@@ -571,110 +637,85 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				<Modal
 					visible={showCreateModal}
 					onDismiss={() => setShowCreateModal(false)}
-					contentContainerStyle={styles.modal}
+					contentContainerStyle={styles.modalContainer}
 				>
 					<Surface style={styles.modalContent}>
-						<Text variant="headlineSmall" style={styles.modalTitle}>
+						<Text variant="titleLarge" style={styles.modalTitle}>
 							Create New Room
 						</Text>
 
 						<TextInput
 							label="Room Name"
 							value={newRoom.name}
-							onChangeText={(text) =>
-								setNewRoom((prev) => ({ ...prev, name: text }))
-							}
+							onChangeText={(text) => setNewRoom({ ...newRoom, name: text })}
 							style={styles.input}
-							maxLength={50}
 						/>
 
 						<TextInput
-							label="Description (optional)"
+							label="Description (Optional)"
 							value={newRoom.description}
 							onChangeText={(text) =>
-								setNewRoom((prev) => ({ ...prev, description: text }))
+								setNewRoom({ ...newRoom, description: text })
 							}
 							style={styles.input}
 							multiline
-							maxLength={200}
 						/>
 
+						{/* Room Type Selection */}
 						<View style={styles.roomTypeContainer}>
-							<Text variant="titleSmall" style={styles.roomTypeLabel}>
+							<Text variant="bodyMedium" style={styles.roomTypeLabel}>
 								Room Type
 							</Text>
 							<View style={styles.roomTypeGrid}>
-								{["focus", "walk", "read", "create", "pray"].map((type) => (
+								{(
+									[
+										"focus",
+										"walk",
+										"read",
+										"create",
+										"pray",
+									] as ParallelRoom["room_type"][]
+								).map((type) => (
 									<Chip
 										key={type}
-										mode={newRoom.room_type === type ? "flat" : "outlined"}
 										selected={newRoom.room_type === type}
-										onPress={() =>
-											setNewRoom((prev) => ({
-												...prev,
-												room_type: type as ParallelRoom["room_type"],
-											}))
-										}
+										onPress={() => setNewRoom({ ...newRoom, room_type: type })}
 										style={[
 											styles.roomTypeChip,
 											newRoom.room_type === type && styles.selectedRoomTypeChip,
 										]}
 									>
-										{getRoomIcon(type)} {type}
+										{getRoomIcon(type)}{" "}
+										{type.charAt(0).toUpperCase() + type.slice(1)}
 									</Chip>
 								))}
 							</View>
 						</View>
 
+						{/* Max Capacity */}
 						<View style={styles.capacityContainer}>
-							<Text variant="titleSmall" style={styles.capacityLabel}>
+							<Text variant="bodyMedium" style={styles.capacityLabel}>
 								Max Capacity: {newRoom.max_capacity}
 							</Text>
-							<View style={styles.capacitySlider}>
-								{[2, 4, 6, 8, 12].map((capacity) => (
-									<Chip
-										key={capacity}
-										mode={
-											newRoom.max_capacity === capacity ? "flat" : "outlined"
-										}
-										selected={newRoom.max_capacity === capacity}
-										onPress={() =>
-											setNewRoom((prev) => ({
-												...prev,
-												max_capacity: capacity,
-											}))
-										}
-										style={styles.roomTypeChip}
-									>
-										{capacity}
-									</Chip>
-								))}
-							</View>
 						</View>
 
-						{user?.faith_mode && (
-							<View style={styles.switchContainer}>
-								<Text variant="titleSmall" style={styles.switchLabel}>
-									Faith Content
-								</Text>
-								<Switch
-									value={newRoom.faith_content}
-									onValueChange={(value) =>
-										setNewRoom((prev) => ({ ...prev, faith_content: value }))
-									}
-								/>
-							</View>
-						)}
+						{/* Faith Content Toggle */}
+						<View style={styles.switchContainer}>
+							<Text variant="bodyMedium" style={styles.switchLabel}>
+								Faith-based content
+							</Text>
+							<Switch
+								value={newRoom.faith_content}
+								onValueChange={(value) =>
+									setNewRoom({ ...newRoom, faith_content: value })
+								}
+							/>
+						</View>
 
+						{/* Actions */}
 						<View style={styles.modalActions}>
-							<Button mode="outlined" onPress={() => setShowCreateModal(false)}>
-								Cancel
-							</Button>
-							<Button
-								mode="contained"
-								onPress={createRoom}
-								disabled={!newRoom.name.trim()}
-							>
+							<Button onPress={() => setShowCreateModal(false)}>Cancel</Button>
+							<Button mode="contained" onPress={createRoom}>
 								Create
 							</Button>
 						</View>
