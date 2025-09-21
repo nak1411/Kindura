@@ -1,9 +1,11 @@
+// src/navigation/MainNavigator.tsx - Updated with Prayer Partners
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DashboardScreen from "../screens/dashboard/DashboardScreen";
 import QuestFeedScreen from "../screens/quests/QuestFeedScreen";
 import RoomsNavigator from "./RoomsNavigator";
+import PrayerPartnersNavigator from "./PrayerPartnersNavigator"; // New
 import MapScreen from "../screens/map/MapScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import DebugScreen from "../screens/debug/DebugScreen";
@@ -27,6 +29,8 @@ export default function MainNavigator() {
 						iconName = focused ? "compass" : "compass-outline";
 					} else if (route.name === "Rooms") {
 						iconName = focused ? "account-group" : "account-group-outline";
+					} else if (route.name === "Prayer") {
+						iconName = focused ? "hands-pray" : "hands-pray";
 					} else if (route.name === "Map") {
 						iconName = focused ? "map-marker" : "map-marker-outline";
 					} else if (route.name === "Debug") {
@@ -55,6 +59,11 @@ export default function MainNavigator() {
 			<Tab.Screen name="Dashboard" component={DashboardScreen} />
 			<Tab.Screen name="Quests" component={QuestFeedScreen} />
 			<Tab.Screen name="Rooms" component={RoomsNavigator} />
+			<Tab.Screen
+				name="Prayer"
+				component={PrayerPartnersNavigator}
+				options={{ tabBarLabel: "Prayer Partners" }}
+			/>
 			<Tab.Screen name="Map" component={MapScreen} />
 			<Tab.Screen name="Profile" component={ProfileScreen} />
 			{__DEV__ && <Tab.Screen name="Debug" component={DebugScreen} />}
