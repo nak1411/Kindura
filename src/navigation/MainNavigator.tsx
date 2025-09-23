@@ -1,4 +1,4 @@
-// src/navigation/MainNavigator.tsx - Updated without Quest system
+// src/navigation/MainNavigator.tsx - Updated without Profile tab
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -6,7 +6,6 @@ import DashboardScreen from "../screens/dashboard/DashboardScreen";
 import RoomsNavigator from "./RoomsNavigator";
 import PrayerPartnersNavigator from "./PrayerPartnersNavigator";
 import MapScreen from "../screens/map/MapScreen";
-import ProfileScreen from "../screens/profile/ProfileScreen";
 import DebugScreen from "../screens/debug/DebugScreen";
 import { useTheme } from "../constants/theme-context";
 
@@ -20,7 +19,7 @@ export default function MainNavigator() {
 			initialRouteName="Dashboard"
 			screenOptions={({ route }) => ({
 				tabBarIcon: ({ focused, color, size }) => {
-					let iconName: string;
+					let iconName: string = "circle";
 
 					if (route.name === "Dashboard") {
 						iconName = focused ? "view-dashboard" : "view-dashboard-outline";
@@ -32,8 +31,6 @@ export default function MainNavigator() {
 						iconName = focused ? "map-marker" : "map-marker-outline";
 					} else if (route.name === "Debug") {
 						iconName = focused ? "bug" : "bug-outline";
-					} else {
-						iconName = focused ? "account-circle" : "account-circle-outline";
 					}
 
 					return (
@@ -61,7 +58,6 @@ export default function MainNavigator() {
 				options={{ tabBarLabel: "Prayer Partners" }}
 			/>
 			<Tab.Screen name="Map" component={MapScreen} />
-			<Tab.Screen name="Profile" component={ProfileScreen} />
 			{__DEV__ && <Tab.Screen name="Debug" component={DebugScreen} />}
 		</Tab.Navigator>
 	);
