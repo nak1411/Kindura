@@ -1,4 +1,4 @@
-// src/types/index.ts - Updated without Quest system
+// src/types/index.ts
 export interface User {
   id: string;
   email: string;
