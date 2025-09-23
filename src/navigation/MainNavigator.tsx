@@ -1,11 +1,10 @@
-// src/navigation/MainNavigator.tsx - Updated with Prayer Partners
+// src/navigation/MainNavigator.tsx - Updated without Quest system
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DashboardScreen from "../screens/dashboard/DashboardScreen";
-import QuestFeedScreen from "../screens/quests/QuestFeedScreen";
 import RoomsNavigator from "./RoomsNavigator";
-import PrayerPartnersNavigator from "./PrayerPartnersNavigator"; // New
+import PrayerPartnersNavigator from "./PrayerPartnersNavigator";
 import MapScreen from "../screens/map/MapScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import DebugScreen from "../screens/debug/DebugScreen";
@@ -25,8 +24,6 @@ export default function MainNavigator() {
 
 					if (route.name === "Dashboard") {
 						iconName = focused ? "view-dashboard" : "view-dashboard-outline";
-					} else if (route.name === "Quests") {
-						iconName = focused ? "compass" : "compass-outline";
 					} else if (route.name === "Rooms") {
 						iconName = focused ? "account-group" : "account-group-outline";
 					} else if (route.name === "Prayer") {
@@ -57,7 +54,6 @@ export default function MainNavigator() {
 			})}
 		>
 			<Tab.Screen name="Dashboard" component={DashboardScreen} />
-			<Tab.Screen name="Quests" component={QuestFeedScreen} />
 			<Tab.Screen name="Rooms" component={RoomsNavigator} />
 			<Tab.Screen
 				name="Prayer"

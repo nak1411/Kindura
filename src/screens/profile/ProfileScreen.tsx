@@ -401,6 +401,7 @@ const styles = StyleSheet.create({
 	},
 	profileHeader: {
 		marginBottom: 16,
+		marginTop: 24,
 	},
 	avatar: {
 		alignSelf: "center",

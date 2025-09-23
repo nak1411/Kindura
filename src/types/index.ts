@@ -1,4 +1,4 @@
-// src/types/index.ts - Updated with Prayer Partner types
+// src/types/index.ts - Updated without Quest system
 export interface User {
   id: string;
   email: string;
@@ -11,7 +11,7 @@ export interface User {
     video_comfort?: boolean;
     topics_to_avoid?: string[];
     faith_preferences?: string;
-    prayer?: PrayerPreferences; // NEW: Added prayer preferences
+    prayer?: PrayerPreferences;
   };
   bio?: string;
   location_lat?: number;
@@ -20,37 +20,6 @@ export interface User {
   last_active: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface Quest {
-  id: string;
-  title: string;
-  description: string;
-  duration_minutes: number;
-  mode: 'voice' | 'text' | 'quiet' | 'video';
-  max_participants: number;
-  faith_content: boolean;
-  template: {
-    warmup?: string;
-    activity?: string;
-    reflection?: string;
-  };
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface QuestSession {
-  id: string;
-  quest_id: string;
-  host_id: string;
-  participants: string[];
-  status: 'waiting' | 'active' | 'completed' | 'cancelled';
-  scheduled_for?: string;
-  started_at?: string;
-  ended_at?: string;
-  reflection_data: any;
-  created_at: string;
-  quest?: Quest;
 }
 
 export interface ParallelRoom {
@@ -124,13 +93,54 @@ export interface PrayerCheckIn {
 export interface PrayerPreferences {
   preferred_time?: 'morning' | 'afternoon' | 'evening' | 'flexible';
   frequency?: 'daily' | 'weekly' | 'flexible';
-  partnership_type?: 'general' | 'accountability' | 'specific_need';
-  topics_comfortable_with?: string[]; // ['anxiety', 'relationships', 'work', 'health', 'family']
-  open_to_partnerships?: boolean;
-  max_partnerships?: number;
+  partnership_types?: ('general' | 'accountability' | 'specific_need')[];
+  topics?: string[];
 }
 
-// Extend the existing User interface to include prayer preferences
-export interface UserWithPrayerPreferences extends User {
-  prayer_preferences?: PrayerPreferences;
+export interface RoomParticipant {
+  id: string;
+  room_id: string;
+  user_id: string;
+  joined_at: string;
+  is_active: boolean;
+  user?: User;
 }
+
+export interface Nudge {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  message: string;
+  nudge_type: 'encouragement' | 'check_in' | 'prayer_reminder';
+  is_read: boolean;
+  created_at: string;
+  from_user?: User;
+  to_user?: User;
+}
+
+// Navigation types
+export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
+  Onboarding: undefined;
+};
+
+export type MainTabParamList = {
+  Dashboard: undefined;
+  Rooms: undefined;
+  Prayer: undefined;
+  Map: undefined;
+  Profile: undefined;
+  Debug?: undefined;
+};
+
+export type RoomsStackParamList = {
+  RoomList: undefined;
+  RoomDetail: { roomId: string };
+};
+
+export type PrayerStackParamList = {
+  PrayerPartnersList: undefined;
+  PrayerRequests: undefined;
+  PartnerProfile: { partnerId: string };
+};

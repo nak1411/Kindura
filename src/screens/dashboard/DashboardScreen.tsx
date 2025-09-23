@@ -1,4 +1,4 @@
-// src/screens/dashboard/DashboardScreen.tsx - Updated with Prayer Partners
+// src/screens/dashboard/DashboardScreen.tsx - Updated without Quest system
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView } from "react-native";
 import {
@@ -14,17 +14,16 @@ import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
 
 type DashboardStats = {
-	questsCompleted: number;
 	roomsJoined: number;
 	nudgesSent: number;
-	prayerPartners: number; // NEW
+	prayerPartners: number;
 	careScore: number;
 	currentStreak: number;
 };
 
 type RecentActivity = {
 	id: string;
-	type: "quest" | "room" | "nudge" | "prayer"; // Added prayer type
+	type: "room" | "nudge" | "prayer";
 	title: string;
 	time: string;
 	participants?: number;
@@ -36,10 +35,9 @@ interface DashboardScreenProps {
 
 export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 	const [stats, setStats] = useState<DashboardStats>({
-		questsCompleted: 0,
 		roomsJoined: 0,
 		nudgesSent: 0,
-		prayerPartners: 0, // NEW
+		prayerPartners: 0,
 		careScore: 0,
 		currentStreak: 0,
 	});
@@ -78,16 +76,15 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 					.eq("status", "active");
 
 				setStats({
-					questsCompleted: profile.quests_completed || 0,
 					roomsJoined: profile.rooms_participated || 0,
 					nudgesSent: profile.nudges_sent || 0,
-					prayerPartners: partnerships?.length || 0, // NEW
+					prayerPartners: partnerships?.length || 0,
 					careScore: profile.care_score || 0,
 					currentStreak: profile.current_streak || 0,
 				});
 			}
 
-			// Enhanced recent activity with prayer activities
+			// Recent activity without quest references
 			setRecentActivity([
 				{
 					id: "1",
@@ -97,23 +94,22 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 				},
 				{
 					id: "2",
-					type: "quest",
-					title: "Completed Morning Reflection",
-					time: "2 hours ago",
-					participants: 3,
+					type: "room",
+					title: "Joined Morning Focus Room",
+					time: "3 hours ago",
+					participants: 4,
 				},
 				{
 					id: "3",
-					type: "room",
-					title: "Joined Focus Room",
+					type: "nudge",
+					title: "Sent encouraging nudge to Sarah",
 					time: "Yesterday",
-					participants: 5,
 				},
 				{
 					id: "4",
 					type: "prayer",
-					title: "Daily check-in with Sarah",
-					time: "Yesterday",
+					title: "New prayer partner connected",
+					time: "2 days ago",
 				},
 			]);
 		} catch (error) {
@@ -123,25 +119,16 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 		}
 	};
 
-	const getGreeting = () => {
-		const hour = new Date().getHours();
-		if (hour < 12) return "Good morning";
-		if (hour < 17) return "Good afternoon";
-		return "Good evening";
-	};
-
 	const getActivityIcon = (type: string) => {
 		switch (type) {
-			case "quest":
-				return "compass";
+			case "prayer":
+				return "hands-pray";
 			case "room":
 				return "account-group";
 			case "nudge":
 				return "heart";
-			case "prayer": // NEW
-				return "hands-pray";
 			default:
-				return "circle";
+				return "information";
 		}
 	};
 
@@ -150,166 +137,176 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 			flex: 1,
 			backgroundColor: theme.colors.background,
 		},
-		header: {
-			backgroundColor: theme.colors.surface,
-			elevation: 4,
-			paddingTop: 40,
-			paddingBottom: 16,
-			paddingHorizontal: 16,
-		},
-		greeting: {
-			color: theme.colors.outline,
-			marginBottom: 4,
-		},
-		welcomeMessage: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
-		},
 		scrollContent: {
-			padding: 16,
+			padding: theme.spacing.md,
+		},
+		welcomeCard: {
+			marginBottom: theme.spacing.lg,
+			marginTop: 24,
+			elevation: 2,
+			backgroundColor: theme.colors.surface,
+		},
+		welcomeText: {
+			fontSize: 24,
+			fontWeight: "bold",
+			color: theme.colors.onSurface,
+			marginBottom: theme.spacing.sm,
+		},
+		welcomeSubtext: {
+			color: theme.colors.onSurfaceVariant,
+			fontSize: 16,
 		},
 		statsCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
+			marginBottom: theme.spacing.lg,
 			elevation: 2,
+			backgroundColor: theme.colors.surface,
 		},
 		statsTitle: {
+			marginBottom: theme.spacing.md,
 			color: theme.colors.primary,
-			marginBottom: 16,
-			textAlign: "center",
 		},
 		statsGrid: {
 			flexDirection: "row",
 			flexWrap: "wrap",
-			justifyContent: "space-between",
 		},
 		statItem: {
+			width: "50%",
 			alignItems: "center",
-			width: "48%",
-			marginBottom: 16,
+			paddingVertical: theme.spacing.md,
 		},
 		statNumber: {
-			color: theme.colors.primary,
+			fontSize: 32,
 			fontWeight: "bold",
-			fontSize: 24,
+			color: theme.colors.primary,
+			marginBottom: theme.spacing.xs,
 		},
 		statLabel: {
-			color: theme.colors.outline,
-			textAlign: "center",
-			marginTop: 4,
 			fontSize: 12,
-		},
-		careScoreCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
-			elevation: 2,
-		},
-		careScoreTitle: {
-			color: theme.colors.primary,
-			marginBottom: 8,
-		},
-		careScoreValue: {
-			color: theme.colors.primary,
-			fontWeight: "bold",
+			color: theme.colors.onSurfaceVariant,
 			textAlign: "center",
-			marginBottom: 8,
-		},
-		progressBar: {
-			height: 8,
-			borderRadius: 4,
-			marginBottom: 8,
-		},
-		progressText: {
-			color: theme.colors.outline,
-			textAlign: "center",
-			fontSize: 12,
 		},
 		quickActionsCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
+			marginBottom: theme.spacing.lg,
 			elevation: 2,
+			backgroundColor: theme.colors.surface,
 		},
 		quickActionsTitle: {
+			marginBottom: theme.spacing.md,
 			color: theme.colors.primary,
-			marginBottom: 16,
 		},
 		actionsGrid: {
 			flexDirection: "row",
 			flexWrap: "wrap",
-			justifyContent: "space-between",
+			gap: theme.spacing.sm,
 		},
 		actionButton: {
-			width: "48%",
-			marginBottom: 12,
-			borderRadius: 8,
+			flex: 1,
+			minWidth: "45%",
 		},
 		recentActivityCard: {
-			backgroundColor: theme.colors.surface,
-			marginBottom: 16,
-			borderRadius: 8,
+			marginBottom: theme.spacing.lg,
 			elevation: 2,
+			backgroundColor: theme.colors.surface,
 		},
 		activityTitle: {
+			marginBottom: theme.spacing.md,
 			color: theme.colors.primary,
-			marginBottom: 16,
 		},
 		activityItem: {
 			flexDirection: "row",
 			alignItems: "center",
-			paddingVertical: 8,
+			paddingVertical: theme.spacing.sm,
+			borderBottomWidth: 1,
+			borderBottomColor: theme.colors.outline + "30",
 		},
 		activityIcon: {
-			marginRight: 12,
+			marginRight: theme.spacing.md,
 		},
 		activityContent: {
 			flex: 1,
 		},
 		activityText: {
+			fontSize: 14,
 			color: theme.colors.onSurface,
+			marginBottom: 2,
 		},
 		activityTime: {
-			color: theme.colors.outline,
 			fontSize: 12,
+			color: theme.colors.onSurfaceVariant,
 		},
-		activityParticipants: {
-			color: theme.colors.outline,
-			fontSize: 12,
+		emptyState: {
+			textAlign: "center",
+			color: theme.colors.onSurfaceVariant,
+			fontStyle: "italic",
+		},
+		careScoreSection: {
+			marginBottom: theme.spacing.lg,
+		},
+		careScoreHeader: {
+			flexDirection: "row",
+			justifyContent: "space-between",
+			alignItems: "center",
+			marginBottom: theme.spacing.sm,
+		},
+		careScoreText: {
+			fontSize: 16,
+			color: theme.colors.onSurface,
+		},
+		careScoreValue: {
+			fontSize: 18,
+			fontWeight: "bold",
+			color: theme.colors.primary,
+		},
+		streakChip: {
+			alignSelf: "flex-start",
+			marginTop: theme.spacing.sm,
 		},
 	});
 
+	if (loading) {
+		return (
+			<View
+				style={[
+					styles.container,
+					{ justifyContent: "center", alignItems: "center" },
+				]}
+			>
+				<Text>Loading dashboard...</Text>
+			</View>
+		);
+	}
+
 	return (
 		<View style={styles.container}>
-			{/* Header */}
-			<Surface style={styles.header}>
-				<Text variant="bodyMedium" style={styles.greeting}>
-					{getGreeting()},
-				</Text>
-				<Text variant="headlineMedium" style={styles.welcomeMessage}>
-					{userName}! ✨
-				</Text>
-			</Surface>
-
-			<ScrollView style={styles.scrollContent}>
-				{/* Care Score Progress */}
-				<Card style={styles.careScoreCard}>
+			<ScrollView
+				contentContainerStyle={styles.scrollContent}
+				showsVerticalScrollIndicator={false}
+			>
+				{/* Welcome Card */}
+				<Card style={styles.welcomeCard}>
 					<Card.Content>
-						<Text variant="titleLarge" style={styles.careScoreTitle}>
-							Care Score
-						</Text>
-						<Text variant="headlineLarge" style={styles.careScoreValue}>
-							{stats.careScore}
-						</Text>
-						<ProgressBar
-							progress={stats.careScore / 100}
-							color={theme.colors.primary}
-							style={styles.progressBar}
-						/>
-						<Text variant="bodySmall" style={styles.progressText}>
-							Keep connecting to grow your care score!
-						</Text>
+						<Text style={styles.welcomeText}>Welcome back, {userName}!</Text>
+					</Card.Content>
+				</Card>
+
+				{/* Care Score Progress */}
+				<Card style={styles.statsCard}>
+					<Card.Content>
+						<View style={styles.careScoreSection}>
+							<View style={styles.careScoreHeader}>
+								<Text style={styles.careScoreText}>Care Score</Text>
+								<Text style={styles.careScoreValue}>{stats.careScore}/100</Text>
+							</View>
+							<ProgressBar
+								progress={stats.careScore / 100}
+								color={theme.colors.primary}
+							/>
+							{stats.currentStreak > 0 && (
+								<Chip icon="fire" style={styles.streakChip}>
+									{stats.currentStreak} day streak!
+								</Chip>
+							)}
+						</View>
 					</Card.Content>
 				</Card>
 
@@ -320,10 +317,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 							Your Journey
 						</Text>
 						<View style={styles.statsGrid}>
-							<View style={styles.statItem}>
-								<Text style={styles.statNumber}>{stats.questsCompleted}</Text>
-								<Text style={styles.statLabel}>Quests{"\n"}Completed</Text>
-							</View>
 							<View style={styles.statItem}>
 								<Text style={styles.statNumber}>{stats.roomsJoined}</Text>
 								<Text style={styles.statLabel}>Rooms{"\n"}Joined</Text>
@@ -336,11 +329,15 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 								<Text style={styles.statNumber}>{stats.nudgesSent}</Text>
 								<Text style={styles.statLabel}>Nudges{"\n"}Sent</Text>
 							</View>
+							<View style={styles.statItem}>
+								<Text style={styles.statNumber}>{stats.careScore}</Text>
+								<Text style={styles.statLabel}>Care{"\n"}Score</Text>
+							</View>
 						</View>
 					</Card.Content>
 				</Card>
 
-				{/* Quick Actions - Updated with Prayer Partners */}
+				{/* Quick Actions - Updated without Quest system */}
 				<Card style={styles.quickActionsCard}>
 					<Card.Content>
 						<Text variant="titleLarge" style={styles.quickActionsTitle}>
@@ -358,14 +355,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 							<Button
 								mode="contained"
 								style={styles.actionButton}
-								onPress={() => navigation.navigate("Quests")}
-								icon="compass"
-							>
-								Find Quest
-							</Button>
-							<Button
-								mode="outlined"
-								style={styles.actionButton}
 								onPress={() => navigation.navigate("Rooms")}
 								icon="account-group"
 							>
@@ -379,6 +368,14 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 							>
 								Explore Map
 							</Button>
+							<Button
+								mode="outlined"
+								style={styles.actionButton}
+								onPress={() => navigation.navigate("Profile")}
+								icon="account-edit"
+							>
+								Edit Profile
+							</Button>
 						</View>
 					</Card.Content>
 				</Card>
@@ -390,33 +387,28 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 							Recent Activity
 						</Text>
 						{recentActivity.length > 0 ? (
-							recentActivity.map((activity) => (
-								<View key={activity.id} style={styles.activityItem}>
+							recentActivity.map((item) => (
+								<View key={item.id} style={styles.activityItem}>
 									<MaterialCommunityIcons
-										name={getActivityIcon(activity.type) as any}
-										size={24}
+										name={getActivityIcon(item.type) as any}
+										size={20}
 										color={theme.colors.primary}
 										style={styles.activityIcon}
 									/>
 									<View style={styles.activityContent}>
-										<Text variant="bodyMedium" style={styles.activityText}>
-											{activity.title}
-										</Text>
-										<Text variant="bodySmall" style={styles.activityTime}>
-											{activity.time}
-											{activity.participants && (
-												<Text style={styles.activityParticipants}>
-													{" "}
-													• {activity.participants} participants
-												</Text>
-											)}
-										</Text>
+										<Text style={styles.activityText}>{item.title}</Text>
+										<Text style={styles.activityTime}>{item.time}</Text>
 									</View>
+									{item.participants && (
+										<Text style={styles.activityTime}>
+											{item.participants} people
+										</Text>
+									)}
 								</View>
 							))
 						) : (
-							<Text variant="bodyMedium" style={styles.activityTime}>
-								No recent activity. Start your journey today!
+							<Text style={styles.emptyState}>
+								Your activity will show up here as you connect with others
 							</Text>
 						)}
 					</Card.Content>

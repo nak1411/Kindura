@@ -300,6 +300,7 @@ export default function DebugScreen({ navigation }: any) {
 			backgroundColor: theme.colors.surface,
 			padding: theme.spacing.lg,
 			borderRadius: 8,
+			marginTop: 24,
 		},
 		title: {
 			textAlign: "center",
