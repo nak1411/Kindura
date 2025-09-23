@@ -1,5 +1,6 @@
 // src/screens/dashboard/DashboardScreen.tsx - Updated with integrated profile editing
 import React, { useState, useEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import {
 	Text,
@@ -217,6 +218,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 		container: {
 			flex: 1,
 			padding: theme.spacing.md,
+			backgroundColor: theme.colors.background,
 		},
 		profileCard: {
 			marginBottom: theme.spacing.lg,
@@ -438,322 +440,328 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 	}
 
 	return (
-		<ScrollView
-			style={[styles.container, { backgroundColor: theme.colors.background }]}
-		>
-			{/* User Profile Header */}
-			{profile && (
-				<Card style={styles.profileCard}>
-					<Card.Content>
-						<View style={styles.profileHeader}>
-							<View style={styles.profileContent}>
-								<Avatar.Text
-									size={60}
-									label={profile.display_name.charAt(0).toUpperCase()}
-									style={[
-										styles.avatar,
-										{ backgroundColor: theme.colors.primary },
-									]}
-								/>
-								<View style={styles.profileInfo}>
-									<Text variant="titleLarge" style={styles.welcomeText}>
-										Welcome back, {userName}!
-									</Text>
-									{profile.bio && (
-										<Text
-											variant="bodyMedium"
-											style={[
-												styles.bio,
-												{ color: theme.colors.onSurfaceVariant },
-											]}
-										>
-											{profile.bio}
+		<SafeAreaView style={styles.container} edges={["top"]}>
+			<ScrollView showsVerticalScrollIndicator={false}>
+				{/* User Profile Header */}
+				{profile && (
+					<Card style={styles.profileCard}>
+						<Card.Content>
+							<View style={styles.profileHeader}>
+								<View style={styles.profileContent}>
+									<Avatar.Text
+										size={60}
+										label={profile.display_name.charAt(0).toUpperCase()}
+										style={[
+											styles.avatar,
+											{ backgroundColor: theme.colors.primary },
+										]}
+									/>
+									<View style={styles.profileInfo}>
+										<Text variant="titleLarge" style={styles.welcomeText}>
+											Welcome back, {userName}!
 										</Text>
-									)}
-									<View style={styles.badgeContainer}>
-										<Text
-											variant="bodyLarge"
-											style={[
-												styles.careScore,
-												{ color: theme.colors.primary },
-											]}
-										>
-											Care Score: {profile.care_score}
-										</Text>
-										{profile.faith_mode && (
-											<Chip
-												mode="flat"
-												compact
-												style={styles.faithChip}
-												textStyle={{ color: theme.colors.onPrimaryContainer }}
-												icon="hands-pray"
+										{profile.bio && (
+											<Text
+												variant="bodyMedium"
+												style={[
+													styles.bio,
+													{ color: theme.colors.onSurfaceVariant },
+												]}
 											>
-												Faith Mode
-											</Chip>
+												{profile.bio}
+											</Text>
 										)}
+										<View style={styles.badgeContainer}>
+											<Text
+												variant="bodyLarge"
+												style={[
+													styles.careScore,
+													{ color: theme.colors.primary },
+												]}
+											>
+												Care Score: {profile.care_score}
+											</Text>
+											{profile.faith_mode && (
+												<Chip
+													mode="flat"
+													compact
+													style={styles.faithChip}
+													textStyle={{ color: theme.colors.onPrimaryContainer }}
+													icon="hands-pray"
+												>
+													Faith Mode
+												</Chip>
+											)}
+										</View>
 									</View>
 								</View>
+								<Button
+									mode="text"
+									onPress={() => setShowProfileModal(true)}
+									icon="pencil"
+									style={styles.editButton}
+									labelStyle={styles.editButtonLabel}
+								>
+									Edit Profile
+								</Button>
 							</View>
+						</Card.Content>
+					</Card>
+				)}
+
+				{/* Statistics Grid */}
+				<Card style={styles.statsCard}>
+					<Card.Content>
+						<Text variant="titleLarge" style={styles.statsTitle}>
+							Your Journey
+						</Text>
+						<View style={styles.statsGrid}>
+							<View style={styles.statItem}>
+								<Text style={styles.statNumber}>{stats.roomsJoined}</Text>
+								<Text style={styles.statLabel}>Rooms{"\n"}Joined</Text>
+							</View>
+							<View style={styles.statItem}>
+								<Text style={styles.statNumber}>{stats.prayerPartners}</Text>
+								<Text style={styles.statLabel}>Prayer{"\n"}Partners</Text>
+							</View>
+							<View style={styles.statItem}>
+								<Text style={styles.statNumber}>{stats.nudgesSent}</Text>
+								<Text style={styles.statLabel}>Nudges{"\n"}Sent</Text>
+							</View>
+							<View style={styles.statItem}>
+								<Text style={styles.statNumber}>{stats.careScore}</Text>
+								<Text style={styles.statLabel}>Care{"\n"}Score</Text>
+							</View>
+						</View>
+					</Card.Content>
+				</Card>
+
+				{/* Quick Actions */}
+				<Card style={styles.quickActionsCard}>
+					<Card.Content>
+						<Text variant="titleLarge" style={styles.quickActionsTitle}>
+							Quick Actions
+						</Text>
+						<View style={styles.actionsGrid}>
 							<Button
-								mode="text"
-								onPress={() => setShowProfileModal(true)}
-								icon="pencil"
-								style={styles.editButton}
-								labelStyle={styles.editButtonLabel}
+								mode="contained"
+								style={styles.actionButton}
+								onPress={() => navigation.navigate("Prayer")}
+								icon="hands-pray"
 							>
-								Edit Profile
+								Prayer Partners
+							</Button>
+							<Button
+								mode="contained"
+								style={styles.actionButton}
+								onPress={() => navigation.navigate("Rooms")}
+								icon="account-group"
+							>
+								Join Room
+							</Button>
+							<Button
+								mode="outlined"
+								style={styles.actionButton}
+								onPress={() => navigation.navigate("Map")}
+								icon="map-marker"
+							>
+								Explore Map
 							</Button>
 						</View>
 					</Card.Content>
 				</Card>
-			)}
 
-			{/* Statistics Grid */}
-			<Card style={styles.statsCard}>
-				<Card.Content>
-					<Text variant="titleLarge" style={styles.statsTitle}>
-						Your Journey
-					</Text>
-					<View style={styles.statsGrid}>
-						<View style={styles.statItem}>
-							<Text style={styles.statNumber}>{stats.roomsJoined}</Text>
-							<Text style={styles.statLabel}>Rooms{"\n"}Joined</Text>
-						</View>
-						<View style={styles.statItem}>
-							<Text style={styles.statNumber}>{stats.prayerPartners}</Text>
-							<Text style={styles.statLabel}>Prayer{"\n"}Partners</Text>
-						</View>
-						<View style={styles.statItem}>
-							<Text style={styles.statNumber}>{stats.nudgesSent}</Text>
-							<Text style={styles.statLabel}>Nudges{"\n"}Sent</Text>
-						</View>
-						<View style={styles.statItem}>
-							<Text style={styles.statNumber}>{stats.careScore}</Text>
-							<Text style={styles.statLabel}>Care{"\n"}Score</Text>
-						</View>
-					</View>
-				</Card.Content>
-			</Card>
-
-			{/* Quick Actions */}
-			<Card style={styles.quickActionsCard}>
-				<Card.Content>
-					<Text variant="titleLarge" style={styles.quickActionsTitle}>
-						Quick Actions
-					</Text>
-					<View style={styles.actionsGrid}>
-						<Button
-							mode="contained"
-							style={styles.actionButton}
-							onPress={() => navigation.navigate("Prayer")}
-							icon="hands-pray"
-						>
-							Prayer Partners
-						</Button>
-						<Button
-							mode="contained"
-							style={styles.actionButton}
-							onPress={() => navigation.navigate("Rooms")}
-							icon="account-group"
-						>
-							Join Room
-						</Button>
-						<Button
-							mode="outlined"
-							style={styles.actionButton}
-							onPress={() => navigation.navigate("Map")}
-							icon="map-marker"
-						>
-							Explore Map
-						</Button>
-					</View>
-				</Card.Content>
-			</Card>
-
-			{/* Recent Activity */}
-			<Card style={styles.recentActivityCard}>
-				<Card.Content>
-					<Text variant="titleLarge" style={styles.activityTitle}>
-						Recent Activity
-					</Text>
-					{recentActivity.length > 0 ? (
-						recentActivity.map((activity) => (
-							<View key={activity.id} style={styles.activityItem}>
-								<MaterialCommunityIcons
-									name={getActivityIcon(activity.type) as any}
-									size={24}
-									color={theme.colors.primary}
-									style={styles.activityIcon}
-								/>
-								<View style={styles.activityContent}>
-									<Text style={styles.activityText}>{activity.title}</Text>
-									<Text style={styles.activityTime}>{activity.time}</Text>
+				{/* Recent Activity */}
+				<Card style={styles.recentActivityCard}>
+					<Card.Content>
+						<Text variant="titleLarge" style={styles.activityTitle}>
+							Recent Activity
+						</Text>
+						{recentActivity.length > 0 ? (
+							recentActivity.map((activity) => (
+								<View key={activity.id} style={styles.activityItem}>
+									<MaterialCommunityIcons
+										name={getActivityIcon(activity.type) as any}
+										size={24}
+										color={theme.colors.primary}
+										style={styles.activityIcon}
+									/>
+									<View style={styles.activityContent}>
+										<Text style={styles.activityText}>{activity.title}</Text>
+										<Text style={styles.activityTime}>{activity.time}</Text>
+									</View>
 								</View>
+							))
+						) : (
+							<Text style={styles.emptyState}>No recent activity</Text>
+						)}
+					</Card.Content>
+				</Card>
+
+				{/* Profile Edit Modal */}
+				<Portal>
+					<Modal
+						visible={showProfileModal}
+						onDismiss={() => setShowProfileModal(false)}
+						contentContainerStyle={[
+							styles.modalContainer,
+							{ backgroundColor: theme.colors.surface },
+						]}
+					>
+						<ScrollView showsVerticalScrollIndicator={false}>
+							<View style={styles.modalHeader}>
+								<Avatar.Text
+									size={80}
+									label={profile?.display_name.charAt(0).toUpperCase() || "U"}
+									style={[
+										styles.modalAvatar,
+										{ backgroundColor: theme.colors.primary },
+									]}
+								/>
+								<Text variant="headlineSmall" style={styles.modalName}>
+									{profile?.display_name}
+								</Text>
 							</View>
-						))
-					) : (
-						<Text style={styles.emptyState}>No recent activity</Text>
-					)}
-				</Card.Content>
-			</Card>
 
-			{/* Profile Edit Modal */}
-			<Portal>
-				<Modal
-					visible={showProfileModal}
-					onDismiss={() => setShowProfileModal(false)}
-					contentContainerStyle={[
-						styles.modalContainer,
-						{ backgroundColor: theme.colors.surface },
-					]}
-				>
-					<ScrollView showsVerticalScrollIndicator={false}>
-						<View style={styles.modalHeader}>
-							<Avatar.Text
-								size={80}
-								label={profile?.display_name.charAt(0).toUpperCase() || "U"}
-								style={[
-									styles.modalAvatar,
-									{ backgroundColor: theme.colors.primary },
-								]}
-							/>
-							<Text variant="headlineSmall" style={styles.modalName}>
-								{profile?.display_name}
-							</Text>
-						</View>
-
-						<View style={styles.modalSection}>
-							<Text variant="titleMedium" style={styles.sectionTitle}>
-								Bio
-							</Text>
-							<TextInput
-								value={editingBio}
-								onChangeText={setEditingBio}
-								style={styles.bioInput}
-								mode="outlined"
-								placeholder="Tell others about yourself..."
-								multiline
-								numberOfLines={4}
-								contentStyle={styles.bioInputContent}
-							/>
-						</View>
-
-						{profile && (
 							<View style={styles.modalSection}>
 								<Text variant="titleMedium" style={styles.sectionTitle}>
-									Preferences
+									Bio
 								</Text>
+								<TextInput
+									value={editingBio}
+									onChangeText={setEditingBio}
+									style={styles.bioInput}
+									mode="outlined"
+									placeholder="Tell others about yourself..."
+									multiline
+									numberOfLines={4}
+									contentStyle={styles.bioInputContent}
+								/>
+							</View>
 
-								<View style={styles.preferenceItem}>
-									<View style={styles.preferenceContent}>
-										<View style={styles.preferenceIcon}>
-											<MaterialCommunityIcons
-												name="bell"
-												size={24}
-												color={theme.colors.primary}
-											/>
+							{profile && (
+								<View style={styles.modalSection}>
+									<Text variant="titleMedium" style={styles.sectionTitle}>
+										Preferences
+									</Text>
+
+									<View style={styles.preferenceItem}>
+										<View style={styles.preferenceContent}>
+											<View style={styles.preferenceIcon}>
+												<MaterialCommunityIcons
+													name="bell"
+													size={24}
+													color={theme.colors.primary}
+												/>
+											</View>
+											<View style={styles.preferenceText}>
+												<Text
+													variant="bodyLarge"
+													style={styles.preferenceTitle}
+												>
+													Notifications
+												</Text>
+												<Text
+													variant="bodySmall"
+													style={[
+														styles.preferenceDescription,
+														{ color: theme.colors.outline },
+													]}
+												>
+													Get notified about activities and prayer requests
+												</Text>
+											</View>
 										</View>
-										<View style={styles.preferenceText}>
-											<Text variant="bodyLarge" style={styles.preferenceTitle}>
-												Notifications
-											</Text>
-											<Text
-												variant="bodySmall"
-												style={[
-													styles.preferenceDescription,
-													{ color: theme.colors.outline },
-												]}
-											>
-												Get notified about activities and prayer requests
-											</Text>
-										</View>
+										<Switch
+											value={profile.notifications_enabled || false}
+											onValueChange={(value) =>
+												updatePreference("notifications_enabled", value)
+											}
+											color={theme.colors.primary}
+										/>
 									</View>
-									<Switch
-										value={profile.notifications_enabled || false}
-										onValueChange={(value) =>
-											updatePreference("notifications_enabled", value)
-										}
-										color={theme.colors.primary}
-									/>
+
+									<View style={styles.preferenceItem}>
+										<View style={styles.preferenceContent}>
+											<View style={styles.preferenceIcon}>
+												<MaterialCommunityIcons
+													name="map-marker"
+													size={24}
+													color={theme.colors.primary}
+												/>
+											</View>
+											<View style={styles.preferenceText}>
+												<Text
+													variant="bodyLarge"
+													style={styles.preferenceTitle}
+												>
+													Location Sharing
+												</Text>
+												<Text
+													variant="bodySmall"
+													style={[
+														styles.preferenceDescription,
+														{ color: theme.colors.outline },
+													]}
+												>
+													Help others find nearby prayer partners
+												</Text>
+											</View>
+										</View>
+										<Switch
+											value={profile.location_sharing || false}
+											onValueChange={(value) =>
+												updatePreference("location_sharing", value)
+											}
+											color={theme.colors.primary}
+										/>
+									</View>
 								</View>
+							)}
 
-								<View style={styles.preferenceItem}>
-									<View style={styles.preferenceContent}>
-										<View style={styles.preferenceIcon}>
-											<MaterialCommunityIcons
-												name="map-marker"
-												size={24}
-												color={theme.colors.primary}
-											/>
-										</View>
-										<View style={styles.preferenceText}>
-											<Text variant="bodyLarge" style={styles.preferenceTitle}>
-												Location Sharing
-											</Text>
-											<Text
-												variant="bodySmall"
-												style={[
-													styles.preferenceDescription,
-													{ color: theme.colors.outline },
-												]}
-											>
-												Help others find nearby prayer partners
-											</Text>
-										</View>
-									</View>
-									<Switch
-										value={profile.location_sharing || false}
-										onValueChange={(value) =>
-											updatePreference("location_sharing", value)
-										}
-										color={theme.colors.primary}
-									/>
+							<View style={styles.modalSection}>
+								<Text variant="titleMedium" style={styles.sectionTitle}>
+									Theme
+								</Text>
+								<View style={styles.themeContainer}>
+									<ThemeToggle />
 								</View>
 							</View>
-						)}
 
-						<View style={styles.modalSection}>
-							<Text variant="titleMedium" style={styles.sectionTitle}>
-								Theme
-							</Text>
-							<View style={styles.themeContainer}>
-								<ThemeToggle />
+							<View style={styles.modalActions}>
+								<Button
+									mode="contained"
+									onPress={handleSaveProfile}
+									style={[
+										styles.saveButton,
+										{ backgroundColor: theme.colors.primary },
+									]}
+									labelStyle={{ color: theme.colors.onPrimary }}
+								>
+									Save Changes
+								</Button>
+								<Button
+									mode="outlined"
+									onPress={() => setShowProfileModal(false)}
+									style={styles.cancelButton}
+								>
+									Cancel
+								</Button>
 							</View>
-						</View>
 
-						<View style={styles.modalActions}>
 							<Button
-								mode="contained"
-								onPress={handleSaveProfile}
-								style={[
-									styles.saveButton,
-									{ backgroundColor: theme.colors.primary },
-								]}
-								labelStyle={{ color: theme.colors.onPrimary }}
+								mode="text"
+								onPress={handleSignOut}
+								style={styles.signOutButton}
+								labelStyle={{ color: theme.colors.error }}
+								icon="logout"
 							>
-								Save Changes
+								Sign Out
 							</Button>
-							<Button
-								mode="outlined"
-								onPress={() => setShowProfileModal(false)}
-								style={styles.cancelButton}
-							>
-								Cancel
-							</Button>
-						</View>
-
-						<Button
-							mode="text"
-							onPress={handleSignOut}
-							style={styles.signOutButton}
-							labelStyle={{ color: theme.colors.error }}
-							icon="logout"
-						>
-							Sign Out
-						</Button>
-					</ScrollView>
-				</Modal>
-			</Portal>
-		</ScrollView>
+						</ScrollView>
+					</Modal>
+				</Portal>
+			</ScrollView>
+		</SafeAreaView>
 	);
 }

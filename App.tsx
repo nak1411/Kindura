@@ -3,6 +3,7 @@ import { View, Text, Alert } from "react-native";
 import { PaperProvider, ActivityIndicator } from "react-native-paper";
 import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "./src/services/supabase";
 import type { User } from "@supabase/supabase-js";
 
@@ -20,7 +21,7 @@ type AppState = "loading" | "auth" | "onboarding" | "main";
 const AppContent: React.FC = () => {
 	const [user, setUser] = useState<User | null>(null);
 	const [appState, setAppState] = useState<AppState>("loading");
-	const { theme } = useTheme(); // Now we can use the theme context
+	const { theme, isDark } = useTheme(); // Get both theme and isDark state
 
 	useEffect(() => {
 		// Get initial session
@@ -43,9 +44,9 @@ const AppContent: React.FC = () => {
 			console.log("🔄 Auth state changed:", event, session?.user?.email);
 			setUser(session?.user ?? null);
 
-			if (event === "SIGNED_IN" && session?.user) {
+			if (session?.user) {
 				checkOnboardingStatus(session.user);
-			} else if (event === "SIGNED_OUT") {
+			} else {
 				setAppState("auth");
 			}
 		});
@@ -55,61 +56,37 @@ const AppContent: React.FC = () => {
 
 	const checkOnboardingStatus = async (user: User) => {
 		try {
-			console.log("🔍 Checking onboarding status for:", user.id);
-
-			// First check if profile exists without using .single()
-			const { data: profiles, error } = await supabase
+			// Check if user exists in users table instead of profiles
+			const { data: userProfile, error } = await supabase
 				.from("users")
-				.select("*")
-				.eq("id", user.id);
+				.select("id, display_name")
+				.eq("id", user.id)
+				.single();
+
+			if (error && error.code === "PGRST116") {
+				// User doesn't exist in users table, needs onboarding
+				console.log("User not found in users table, needs onboarding");
+				setAppState("onboarding");
+				return;
+			}
 
 			if (error) {
-				console.log("❌ Error checking profile:", error);
+				console.error("Error checking onboarding status:", error);
 				setAppState("onboarding");
 				return;
 			}
 
-			// Check if any profiles were returned
-			if (!profiles || profiles.length === 0) {
-				console.log("📝 No profile found - user needs onboarding");
-				setAppState("onboarding");
-				return;
-			}
-
-			const profile = profiles[0];
-
-			// Check if user has completed onboarding
-			const hasCompletedOnboarding =
-				profile &&
-				profile.preferences &&
-				Object.keys(profile.preferences).length > 0;
-
-			if (hasCompletedOnboarding) {
-				console.log("✅ User has completed onboarding - going to main app");
+			// If user exists in users table, go to main app
+			if (userProfile) {
 				setAppState("main");
 			} else {
-				console.log("📝 User needs onboarding");
 				setAppState("onboarding");
 			}
 		} catch (error) {
-			console.error("❌ Error checking onboarding:", error);
+			console.error("Error checking onboarding:", error);
 			setAppState("onboarding");
 		}
 	};
-
-	const handleOnboardingComplete = () => {
-		console.log("🎉 Onboarding completed, transitioning to main app");
-		setAppState("main");
-
-		setTimeout(() => {
-			Alert.alert(
-				"Welcome to Kindura! ✨",
-				"Your profile has been set up. Enjoy your journey of connections!"
-			);
-		}, 500);
-	};
-
-	console.log("🎯 Current app state:", appState);
 
 	if (appState === "loading") {
 		return (
@@ -121,14 +98,9 @@ const AppContent: React.FC = () => {
 					backgroundColor: theme.colors.background,
 				}}
 			>
-				<ActivityIndicator size="large" color={theme.colors.primary} />
-				<Text
-					style={{
-						marginTop: 16,
-						color: theme.colors.outline,
-					}}
-				>
-					Loading Kindura...
+				<ActivityIndicator size="large" />
+				<Text style={{ marginTop: 16, color: theme.colors.onBackground }}>
+					Loading...
 				</Text>
 			</View>
 		);
@@ -136,23 +108,27 @@ const AppContent: React.FC = () => {
 
 	return (
 		<NavigationContainer>
-			<StatusBar style={theme.dark ? "light" : "dark"} />
+			<StatusBar style={isDark ? "light" : "dark"} />
 			{appState === "auth" && <AuthNavigator />}
 			{appState === "onboarding" && (
-				<OnboardingScreen user={user} onComplete={handleOnboardingComplete} />
+				<OnboardingScreen user={user!} onComplete={() => setAppState("main")} />
 			)}
 			{appState === "main" && <MainNavigator />}
 		</NavigationContainer>
 	);
 };
 
-// Wrap the app with ThemeProvider
-export default function App() {
+// Main App wrapper with all providers
+const App = () => {
 	return (
-		<ThemeProvider>
-			<PaperProvider>
-				<AppContent />
-			</PaperProvider>
-		</ThemeProvider>
+		<SafeAreaProvider>
+			<ThemeProvider>
+				<PaperProvider>
+					<AppContent />
+				</PaperProvider>
+			</ThemeProvider>
+		</SafeAreaProvider>
 	);
-}
+};
+
+export default App;

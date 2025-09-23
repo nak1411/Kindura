@@ -1,5 +1,6 @@
 import React from "react";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, Surface } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../services/supabase";
@@ -336,84 +337,86 @@ export default function DebugScreen({ navigation }: any) {
 	});
 
 	return (
-		<ScrollView style={styles.container}>
-			<Surface style={styles.surface}>
-				<Text variant="headlineMedium" style={styles.title}>
-					Debug & Development
-				</Text>
-				<Text variant="bodyMedium" style={styles.subtitle}>
-					Tools for testing and troubleshooting
-				</Text>
-
-				<View style={styles.section}>
-					<Text variant="titleLarge" style={styles.sectionTitle}>
-						Storage Management
+		<SafeAreaView style={styles.container} edges={["top"]}>
+			<ScrollView showsVerticalScrollIndicator={false}>
+				<Surface style={styles.surface}>
+					<Text variant="headlineMedium" style={styles.title}>
+						Debug & Development
 					</Text>
+					<Text variant="bodyMedium" style={styles.subtitle}>
+						Tools for testing and troubleshooting
+					</Text>
+
+					<View style={styles.section}>
+						<Text variant="titleLarge" style={styles.sectionTitle}>
+							Storage Management
+						</Text>
+
+						<Button
+							mode="outlined"
+							onPress={showStorageData}
+							style={styles.button}
+							icon="database-eye"
+						>
+							View Storage Data
+						</Button>
+
+						<Button
+							mode="outlined"
+							onPress={clearAsyncStorage}
+							style={styles.button}
+							icon="delete-sweep"
+						>
+							Clear AsyncStorage
+						</Button>
+					</View>
+
+					<View style={styles.section}>
+						<Text variant="titleLarge" style={styles.sectionTitle}>
+							Profile Management
+						</Text>
+
+						<Button
+							mode="outlined"
+							onPress={resetUserProfile}
+							style={styles.button}
+							icon="account-reactivate"
+						>
+							Reset User Profile
+						</Button>
+					</View>
+
+					<View style={styles.section}>
+						<Text variant="titleLarge" style={styles.dangerTitle}>
+							⚠️ Danger Zone
+						</Text>
+
+						<Button
+							mode="outlined"
+							onPress={devCompleteWipe}
+							style={styles.button}
+							icon="nuke"
+							buttonColor={theme.colors.errorContainer}
+							textColor={theme.colors.error}
+						>
+							Nuke All User Data
+						</Button>
+
+						<Text variant="bodySmall" style={styles.warningText}>
+							⚠️ Permanent deletion cannot be undone.
+						</Text>
+					</View>
 
 					<Button
 						mode="outlined"
-						onPress={showStorageData}
+						onPress={() => navigation.goBack()}
 						style={styles.button}
-						icon="database-eye"
+						icon="arrow-left"
 					>
-						View Storage Data
+						Back to Profile
 					</Button>
-
-					<Button
-						mode="outlined"
-						onPress={clearAsyncStorage}
-						style={styles.button}
-						icon="delete-sweep"
-					>
-						Clear AsyncStorage
-					</Button>
-				</View>
-
-				<View style={styles.section}>
-					<Text variant="titleLarge" style={styles.sectionTitle}>
-						Profile Management
-					</Text>
-
-					<Button
-						mode="outlined"
-						onPress={resetUserProfile}
-						style={styles.button}
-						icon="account-reactivate"
-					>
-						Reset User Profile
-					</Button>
-				</View>
-
-				<View style={styles.section}>
-					<Text variant="titleLarge" style={styles.dangerTitle}>
-						⚠️ Danger Zone
-					</Text>
-
-					<Button
-						mode="outlined"
-						onPress={devCompleteWipe}
-						style={styles.button}
-						icon="nuke"
-						buttonColor={theme.colors.errorContainer}
-						textColor={theme.colors.error}
-					>
-						Nuke All User Data
-					</Button>
-
-					<Text variant="bodySmall" style={styles.warningText}>
-						⚠️ Permanent deletion cannot be undone.
-					</Text>
-				</View>
-
-				<Button
-					mode="outlined"
-					onPress={() => navigation.goBack()}
-					style={styles.button}
-					icon="arrow-left"
-				>
-					Back to Profile
-				</Button>
-			</Surface>
-		</ScrollView>
+				</Surface>
+			</ScrollView>
+		</SafeAreaView>
 	);
 }
