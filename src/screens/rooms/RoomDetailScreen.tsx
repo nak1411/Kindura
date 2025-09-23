@@ -536,76 +536,53 @@ export default function RoomDetailScreen({
 	// Periodic message refresh
 	const refreshMessages = useCallback(async () => {
 		try {
+			// First get messages without join
 			const { data, error } = await supabase
 				.from("room_messages")
-				.select(
-					`
-					*,
-					users:user_id (display_name)
-				`
-				)
+				.select("*")
 				.eq("room_id", roomId)
 				.order("created_at", { ascending: true })
 				.limit(100);
 
 			if (error) throw error;
 
-			// Process messages and handle missing user data
-			const formattedMessages = await Promise.all(
-				(data || []).map(async (msg) => {
-					let user_name = msg.users?.display_name;
-
-					// If join failed, try direct lookup
-					if (!user_name) {
-						try {
-							const { data: userData } = await supabase
-								.from("users")
-								.select("display_name")
-								.eq("id", msg.user_id)
-								.single();
-
-							user_name = userData?.display_name || "Anonymous";
-						} catch (userError) {
-							user_name = "Anonymous";
-						}
-					}
-
-					return {
-						...msg,
-						timestamp: msg.created_at,
-						user_name: user_name,
-					};
-				})
+			// Get all unique user IDs from messages
+			const userIds = Array.from(
+				new Set(data?.map((msg) => msg.user_id) || [])
 			);
 
-			// Check if there are new messages by comparing with current state
-			const hasNewMessages =
-				formattedMessages.length > messages.length ||
-				(formattedMessages.length > 0 &&
-					formattedMessages[formattedMessages.length - 1]?.id !==
-						lastMessageId);
+			// Fetch user data for all users
+			const { data: users, error: userError } = await supabase
+				.from("users")
+				.select("id, display_name")
+				.in("id", userIds);
 
-			setMessages(formattedMessages);
-
-			if (formattedMessages.length > 0) {
-				const latestMessageId =
-					formattedMessages[formattedMessages.length - 1]?.id;
-				setLastMessageId(latestMessageId);
-
-				// Only auto-scroll if there are new messages
-				if (hasNewMessages) {
-					setTimeout(() => {
-						messagesListRef.current?.scrollToEnd({ animated: true });
-					}, 100);
-				}
+			if (userError) {
+				console.error("Error fetching users:", userError);
 			}
 
-			setConnectionStatus((prev) => ({ ...prev, isConnected: true }));
+			// Create user lookup map
+			const userMap = new Map();
+			(users || []).forEach((user) => {
+				userMap.set(user.id, user);
+			});
+
+			// Format messages with user names
+			const formattedMessages = (data || []).map((msg) => ({
+				...msg,
+				timestamp: msg.created_at,
+				user_name: userMap.get(msg.user_id)?.display_name || "Anonymous",
+			}));
+
+			setMessages(formattedMessages);
+			console.log(
+				"Refreshed messages with user names:",
+				formattedMessages.length
+			);
 		} catch (error) {
 			console.error("Error refreshing messages:", error);
-			setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
 		}
-	}, [roomId, messages.length, lastMessageId]);
+	}, [roomId]);
 
 	// Retry mechanism for sending messages
 	const sendMessageWithRetry = useCallback(
@@ -1183,6 +1160,7 @@ export default function RoomDetailScreen({
 						onChangeText={setNewMessage}
 						placeholder={isRetrying ? "Sending..." : "Send a message..."}
 						style={styles.messageInput}
+						textColor={theme.colors.onSurface}
 						multiline
 						disabled={isRetrying || !connectionStatus.isConnected}
 						right={

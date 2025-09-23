@@ -24,7 +24,7 @@ type ThemeProviderProps = {
 };
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-	const [isDark, setIsDark] = useState(false);
+	const [isDark, setIsDark] = useState(true); // Default to dark theme
 	const [isLoading, setIsLoading] = useState(true);
 
 	// Load theme preference on app start
@@ -35,13 +35,12 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 				if (savedTheme !== null) {
 					setIsDark(JSON.parse(savedTheme));
 				} else {
-					// Check system preference if no saved preference
-					// You can add system theme detection here if needed
-					setIsDark(false);
+					// Default to dark theme if no saved preference
+					setIsDark(true);
 				}
 			} catch (error) {
 				console.error("Error loading theme preference:", error);
-				setIsDark(false);
+				setIsDark(true); // Default to dark on error
 			} finally {
 				setIsLoading(false);
 			}

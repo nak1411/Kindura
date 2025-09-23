@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { Button, TextInput, Text, Surface } from "react-native-paper";
 import { supabase } from "../../services/supabase";
-import { theme } from "../../constants/theme";
 
 export default function LoginScreen({ navigation }: any) {
 	const [email, setEmail] = useState("");
@@ -25,10 +24,10 @@ export default function LoginScreen({ navigation }: any) {
 	return (
 		<View style={styles.container}>
 			<Surface style={styles.surface}>
-				<Text variant="headlineMedium" style={styles.title}>
-					Welcome to Kindura
+				<Text variant="headlineLarge" style={styles.title}>
+					Welcome to Kindura ✨
 				</Text>
-				<Text variant="bodyMedium" style={styles.subtitle}>
+				<Text variant="bodyLarge" style={styles.subtitle}>
 					Connections, meaningful moments
 				</Text>
 
@@ -39,6 +38,11 @@ export default function LoginScreen({ navigation }: any) {
 					mode="outlined"
 					style={styles.input}
 					autoCapitalize="none"
+					keyboardType="email-address"
+					textColor="#ffffff"
+					outlineColor="#444444"
+					activeOutlineColor="#6c63ff"
+					contentStyle={{ color: "#ffffff" }}
 				/>
 
 				<TextInput
@@ -48,6 +52,10 @@ export default function LoginScreen({ navigation }: any) {
 					mode="outlined"
 					secureTextEntry
 					style={styles.input}
+					textColor="#ffffff"
+					outlineColor="#444444"
+					activeOutlineColor="#6c63ff"
+					contentStyle={{ color: "#ffffff" }}
 				/>
 
 				<Button
@@ -55,6 +63,8 @@ export default function LoginScreen({ navigation }: any) {
 					onPress={handleLogin}
 					loading={loading}
 					style={styles.button}
+					buttonColor="#6c63ff"
+					textColor="#ffffff"
 				>
 					Sign In
 				</Button>
@@ -63,6 +73,7 @@ export default function LoginScreen({ navigation }: any) {
 					mode="text"
 					onPress={() => navigation.navigate("SignUp")}
 					style={styles.linkButton}
+					textColor="#b0b0b0"
 				>
 					Don't have an account? Sign up
 				</Button>
@@ -74,32 +85,41 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: theme.colors.background,
+		backgroundColor: "#000000", // Dark background
 		justifyContent: "center",
-		padding: theme.spacing.md,
+		padding: 16,
 	},
 	surface: {
-		padding: theme.spacing.lg,
-		borderRadius: 16,
+		backgroundColor: "#1a1a1a", // Dark surface
+		padding: 32,
+		borderRadius: 24,
+		borderWidth: 1,
+		borderColor: "#333333",
 	},
 	title: {
 		textAlign: "center",
-		marginBottom: theme.spacing.sm,
-		color: theme.colors.primary,
+		marginBottom: 8,
+		color: "#ffffff", // White text
+		fontWeight: "bold",
 	},
 	subtitle: {
 		textAlign: "center",
-		marginBottom: theme.spacing.xl,
-		color: theme.colors.outline,
+		marginBottom: 40,
+		color: "#b0b0b0", // Light gray
+		lineHeight: 24,
 	},
 	input: {
-		marginBottom: theme.spacing.md,
+		marginBottom: 16,
+		backgroundColor: "#2a2a2a", // Dark input background
+		borderRadius: 12,
 	},
 	button: {
-		marginTop: theme.spacing.md,
-		marginBottom: theme.spacing.sm,
+		marginTop: 24,
+		marginBottom: 16,
+		paddingVertical: 8,
+		borderRadius: 12,
 	},
 	linkButton: {
-		marginTop: theme.spacing.sm,
+		marginTop: 8,
 	},
 });
