@@ -361,6 +361,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 		modalName: {
 			textAlign: "center",
 			fontWeight: "600",
+			color: theme.colors.onSurface,
 		},
 		modalSection: {
 			marginBottom: 24,
@@ -368,6 +369,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 		sectionTitle: {
 			marginBottom: 16,
 			fontWeight: "600",
+			color: theme.colors.onSurface,
 		},
 		bioInput: {
 			backgroundColor: "transparent",
