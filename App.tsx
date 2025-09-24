@@ -56,7 +56,17 @@ const AppContent: React.FC = () => {
 
 	const checkOnboardingStatus = async (user: User) => {
 		try {
-			// Check if user exists in users table instead of profiles
+			console.log("🔍 Checking onboarding status for:", user.email);
+			console.log("User metadata:", user.user_metadata);
+
+			// First check: If user has needs_onboarding flag in metadata, show onboarding
+			if (user.user_metadata?.needs_onboarding === true) {
+				console.log("✨ needs_onboarding flag found, showing onboarding");
+				setAppState("onboarding");
+				return;
+			}
+
+			// Second check: Look for profile in database
 			const { data: userProfile, error } = await supabase
 				.from("users")
 				.select("id, display_name")
@@ -65,25 +75,30 @@ const AppContent: React.FC = () => {
 
 			if (error && error.code === "PGRST116") {
 				// User doesn't exist in users table, needs onboarding
-				console.log("User not found in users table, needs onboarding");
+				console.log("✨ User not found in users table, needs onboarding");
 				setAppState("onboarding");
 				return;
 			}
 
 			if (error) {
-				console.error("Error checking onboarding status:", error);
+				console.error("❌ Error checking onboarding status:", error);
+				// On error, default to onboarding to be safe
+				console.log("🔄 Defaulting to onboarding due to error");
 				setAppState("onboarding");
 				return;
 			}
 
 			// If user exists in users table, go to main app
 			if (userProfile) {
+				console.log("✅ User profile found, going to main app");
 				setAppState("main");
 			} else {
+				console.log("🤔 No user profile found, needs onboarding");
 				setAppState("onboarding");
 			}
 		} catch (error) {
-			console.error("Error checking onboarding:", error);
+			console.error("❌ Exception in onboarding check:", error);
+			console.log("🔄 Defaulting to onboarding due to exception");
 			setAppState("onboarding");
 		}
 	};

@@ -481,17 +481,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 											>
 												Care Score: {profile.care_score}
 											</Text>
-											{profile.faith_mode && (
-												<Chip
-													mode="flat"
-													compact
-													style={styles.faithChip}
-													textStyle={{ color: theme.colors.onPrimaryContainer }}
-													icon="hands-pray"
-												>
-													Faith Mode
-												</Chip>
-											)}
 										</View>
 									</View>
 								</View>

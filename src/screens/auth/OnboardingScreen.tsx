@@ -73,7 +73,6 @@ export default function OnboardingScreen({
 				p_user_id: user.id,
 				p_email: user.email,
 				p_display_name: displayName,
-				p_faith_mode: true, // Default to true
 				p_bio: bio || null,
 				p_preferences: {}, // Simplified - no complex preferences
 				p_care_score: 0,
@@ -88,7 +87,6 @@ export default function OnboardingScreen({
 					id: user.id,
 					email: user.email,
 					display_name: displayName,
-					faith_mode: true, // Default to true
 					bio: bio || null,
 					preferences: {}, // Simplified
 					care_score: 0,
@@ -112,6 +110,24 @@ export default function OnboardingScreen({
 				"✅ Profile saved successfully with display name:",
 				displayName
 			);
+
+			// Clear the needs_onboarding flag from user metadata
+			try {
+				const { error: updateError } = await supabase.auth.updateUser({
+					data: {
+						needs_onboarding: false, // Clear the flag
+					},
+				});
+
+				if (updateError) {
+					console.warn("Could not clear onboarding flag:", updateError);
+				} else {
+					console.log("✅ Cleared needs_onboarding flag");
+				}
+			} catch (flagError) {
+				console.warn("Exception clearing onboarding flag:", flagError);
+			}
+
 			onComplete();
 		} catch (error: any) {
 			console.error("❌ Onboarding error:", error);

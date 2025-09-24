@@ -41,7 +41,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		description: "",
 		room_type: "focus" as ParallelRoom["room_type"],
 		max_capacity: 8,
-		faith_content: false,
 	});
 	const { theme } = useTheme();
 
@@ -189,11 +188,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				.select("*")
 				.eq("is_active", true);
 
-			// Filter faith content based on user preference
-			if (user && !user.faith_mode) {
-				query = query.eq("faith_content", false);
-			}
-
 			const { data, error } = await query.order("created_at", {
 				ascending: false,
 			});
@@ -321,7 +315,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 					room_type: newRoom.room_type,
 					max_capacity: newRoom.max_capacity,
 					current_participants: [user.id],
-					faith_content: newRoom.faith_content,
 					ambient_sound: null, // Always set to null since we're removing audio
 					created_by: user.id,
 					is_active: true,
@@ -336,7 +329,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 				description: "",
 				room_type: "focus",
 				max_capacity: 8,
-				faith_content: false,
 			});
 
 			Alert.alert("Success", "Room created successfully!");
@@ -697,19 +689,6 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 							<Text variant="bodyMedium" style={styles.capacityLabel}>
 								Max Capacity: {newRoom.max_capacity}
 							</Text>
-						</View>
-
-						{/* Faith Content Toggle */}
-						<View style={styles.switchContainer}>
-							<Text variant="bodyMedium" style={styles.switchLabel}>
-								Faith-based content
-							</Text>
-							<Switch
-								value={newRoom.faith_content}
-								onValueChange={(value) =>
-									setNewRoom({ ...newRoom, faith_content: value })
-								}
-							/>
 						</View>
 
 						{/* Actions */}

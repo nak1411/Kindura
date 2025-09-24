@@ -4,7 +4,6 @@ export interface User {
   email: string;
   phone?: string;
   display_name: string;
-  faith_mode: boolean;
   care_score: number;
   preferences: {
     voice_comfort?: boolean;
