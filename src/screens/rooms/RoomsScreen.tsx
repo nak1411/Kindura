@@ -24,6 +24,7 @@ import {
 import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
 import { ParallelRoom, User } from "../../types";
+import { roomUtils } from "../../utils/roomUtils";
 
 interface RoomsScreenProps {
 	navigation: any;
@@ -226,33 +227,12 @@ export default function RoomsScreen({ navigation }: RoomsScreenProps) {
 		if (!user) return;
 
 		try {
-			// Check if room is full
-			const { data: roomData } = await supabase
-				.from("parallel_rooms")
-				.select("current_participants, max_capacity")
-				.eq("id", roomId)
-				.single();
+			const result = await roomUtils.joinRoom(roomId, user.id);
 
-			if (
-				roomData &&
-				roomData.current_participants.length >= roomData.max_capacity
-			) {
-				Alert.alert("Room Full", "This room is currently at capacity");
+			if (!result.success) {
+				Alert.alert("Error", result.error || "Failed to join room");
 				return;
 			}
-
-			// Add user to room
-			const updatedParticipants = [
-				...(roomData?.current_participants || []),
-				user.id,
-			];
-
-			const { error } = await supabase
-				.from("parallel_rooms")
-				.update({ current_participants: updatedParticipants })
-				.eq("id", roomId);
-
-			if (error) throw error;
 
 			setJoinedRoom(roomId);
 			navigation.navigate("RoomDetail", { roomId });

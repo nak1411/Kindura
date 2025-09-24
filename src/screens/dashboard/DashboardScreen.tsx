@@ -20,6 +20,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
 import { ThemeToggle } from "../../components/theme-toggle";
+import { useFocusEffect } from "@react-navigation/native";
 
 type DashboardStats = {
 	roomsJoined: number;
@@ -69,6 +70,12 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 	const [editingBio, setEditingBio] = useState("");
 	const [loading, setLoading] = useState(true);
 	const { theme } = useTheme();
+
+	useFocusEffect(
+		React.useCallback(() => {
+			fetchDashboardData();
+		}, [])
+	);
 
 	useEffect(() => {
 		fetchDashboardData();

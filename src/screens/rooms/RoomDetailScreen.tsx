@@ -1,3 +1,4 @@
+// src/screens/rooms/RoomDetailScreen.tsx - Updated with nudge functionality
 import React, {
 	useState,
 	useEffect,
@@ -24,6 +25,9 @@ import {
 	Avatar,
 	TextInput,
 	Snackbar,
+	Modal,
+	Portal,
+	Button,
 } from "react-native-paper";
 import { supabase } from "../../services/supabase";
 import { useTheme } from "../../constants/theme-context";
@@ -87,400 +91,94 @@ export default function RoomDetailScreen({
 	const [presenceTimer, setPresenceTimer] = useState(0);
 	const presenceAnimation = useRef(new Animated.Value(0.5)).current;
 
+	// Nudge state
+	const [showNudgeModal, setShowNudgeModal] = useState(false);
+	const [selectedParticipant, setSelectedParticipant] = useState<string | null>(
+		null
+	);
+	const [nudgeMessage, setNudgeMessage] = useState("");
+
 	// Refs
 	const messagesListRef = useRef<FlatList>(null);
 	const realtimeSubscription = useRef<any>(null);
 	const presenceInterval = useRef<NodeJS.Timeout | null>(null);
 	const appStateRef = useRef(AppState.currentState);
 
-	// Styles
-	const styles = useMemo(
-		() =>
-			StyleSheet.create({
-				container: {
-					flex: 1,
-					backgroundColor: theme.colors.background,
-				},
-				header: {
-					backgroundColor: theme.colors.surface,
-					elevation: 4,
-					paddingTop: 40,
-					paddingBottom: 16,
-					paddingHorizontal: 16,
-				},
-				headerContent: {
-					flexDirection: "row",
-					justifyContent: "space-between",
-					alignItems: "center",
-				},
-				backButton: {
-					margin: 0,
-				},
-				headerCenter: {
-					flex: 1,
-					alignItems: "center",
-				},
-				roomTitle: {
-					color: theme.colors.primary,
-					fontWeight: "bold",
-				},
-				presenceTime: {
-					color: theme.colors.outline,
-					marginTop: 4,
-				},
-				scrollContent: {
-					flex: 1,
-				},
-				participantsSection: {
-					backgroundColor: theme.colors.surface,
-					paddingHorizontal: 16,
-					paddingVertical: 8,
-					borderBottomWidth: 1,
-					borderBottomColor: theme.colors.outline + "20",
-				},
-				participantsContent: {
-					flexDirection: "row",
-					alignItems: "center",
-					justifyContent: "space-between",
-				},
-				participantsLabel: {
-					color: theme.colors.primary,
-					fontWeight: "500",
-				},
-				infoSection: {
-					padding: 16,
-				},
-				participantsCard: {
-					marginBottom: 16,
-					backgroundColor: theme.colors.surface,
-				},
-				sectionTitle: {
-					color: theme.colors.primary,
-					fontWeight: "bold",
-					marginBottom: 12,
-				},
-				participantsList: {
-					flexDirection: "row",
-					flexWrap: "wrap",
-					gap: 4,
-				},
-				participantAvatar: {
-					backgroundColor: theme.colors.primaryContainer,
-				},
-				messagesContainer: {
-					flex: 1,
-					backgroundColor: theme.colors.surface,
-				},
-				messagesHeader: {
-					padding: 16,
-					paddingBottom: 8,
-					borderBottomWidth: 1,
-					borderBottomColor: theme.colors.outline + "20",
-				},
-				messagesList: {
-					flex: 1,
-					paddingHorizontal: 16,
-				},
-				messageItem: {
-					marginVertical: 4,
-					paddingHorizontal: 4,
-				},
-				ownMessage: {
-					alignItems: "flex-end",
-				},
-				otherMessage: {
-					alignItems: "flex-start",
-				},
-				ownMessageContent: {
-					maxWidth: "80%",
-					padding: 12,
-					borderRadius: 8,
-					backgroundColor: theme.colors.primary,
-				},
-				otherMessageContent: {
-					maxWidth: "80%",
-					padding: 12,
-					borderRadius: 8,
-					backgroundColor: theme.colors.surfaceVariant,
-				},
-				messageText: {
-					color: theme.colors.onSurface,
-					marginTop: 4,
-				},
-				ownMessageText: {
-					color: theme.colors.onPrimary,
-					marginTop: 4,
-				},
-				otherMessageText: {
-					color: theme.colors.onSurface,
-					marginTop: 4,
-				},
-				messageTimestamp: {
-					fontSize: 11,
-					marginTop: 4,
-					marginHorizontal: 8,
-				},
-				ownMessageTimestamp: {
-					fontSize: 11,
-					color: theme.colors.outline,
-					marginTop: 4,
-					marginHorizontal: 8,
-					textAlign: "right",
-				},
-				otherMessageTimestamp: {
-					fontSize: 11,
-					color: theme.colors.outline,
-					marginTop: 4,
-					marginHorizontal: 8,
-					textAlign: "left",
-				},
-				emptyMessages: {
-					flex: 1,
-					justifyContent: "center",
-					alignItems: "center",
-					padding: 32,
-				},
-				emptyText: {
-					color: theme.colors.outline,
-					textAlign: "center",
-					marginTop: 16,
-				},
-				inputContainer: {
-					margin: 16,
-					marginTop: 8,
-					backgroundColor: theme.colors.surface,
-				},
-				messageInput: {
-					backgroundColor: theme.colors.surface,
-				},
-				connectionSection: {
-					paddingHorizontal: 16,
-					paddingVertical: 8,
-					backgroundColor: theme.colors.surface,
-					borderBottomWidth: 1,
-					borderBottomColor: theme.colors.outline + "20",
-				},
-				connectionContent: {
-					flexDirection: "row",
-					alignItems: "center",
-					gap: 8,
-				},
-				connectionIndicator: {
-					width: 8,
-					height: 8,
-					borderRadius: 4,
-				},
-				connected: {
-					backgroundColor: theme.colors.primary,
-				},
-				disconnected: {
-					backgroundColor: theme.colors.error,
-				},
-				connectionText: {
-					color: theme.colors.outline,
-					fontSize: 12,
-				},
-			}),
-		[theme]
+	// Nudge functions
+	const sendNudge = useCallback(
+		async (toUserId: string, message: string) => {
+			if (!user) return;
+
+			try {
+				const { error } = await supabase.from("nudges").insert({
+					from_user_id: user.id,
+					to_user_id: toUserId,
+					message: message.trim() || "Sending you encouragement! 💚",
+					nudge_type: "encouragement",
+				});
+
+				if (error) throw error;
+
+				// Update user's nudges sent count
+				await supabase
+					.from("users")
+					.update({
+						nudges_sent: (user.nudges_sent || 0) + 1,
+					})
+					.eq("id", user.id);
+
+				Alert.alert("Encouragement Sent!", "Your nudge was delivered.");
+				setShowNudgeModal(false);
+				setNudgeMessage("");
+				setSelectedParticipant(null);
+			} catch (error) {
+				console.error("Error sending nudge:", error);
+				Alert.alert("Error", "Failed to send encouragement");
+			}
+		},
+		[user]
 	);
 
-	// Setup real-time subscription with error handling
-	const setupRealtimeSubscription = useCallback(() => {
-		const subscription = supabase
-			.channel(`room_${roomId}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "INSERT",
-					schema: "public",
-					table: "room_messages",
-					filter: `room_id=eq.${roomId}`,
-				},
-				(payload: any) => {
-					console.log("New message received:", payload.new);
-					handleNewMessage(payload.new as RoomMessage);
-				}
-			)
-			.on(
-				"postgres_changes",
-				{
-					event: "UPDATE",
-					schema: "public",
-					table: "parallel_rooms",
-					filter: `id=eq.${roomId}`,
-				},
-				(payload: any) => {
-					console.log("Room updated:", payload.new);
-					setRoom(payload.new as ParallelRoom);
-					// When room updates (like new user joining), refresh participants
-					loadParticipants(payload.new as ParallelRoom);
-				}
-			)
-			.subscribe((status: string) => {
-				console.log("Subscription status:", status);
-				if (status === "SUBSCRIBED") {
-					setConnectionStatus((prev) => ({
-						...prev,
-						isConnected: true,
-						retryCount: 0,
-					}));
-					setShowConnectionError(false);
-				} else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-					setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
-					setShowConnectionError(true);
-				}
-			});
+	const showNudgeOptions = useCallback(() => {
+		const otherParticipants = participants.filter((p) => p.id !== user?.id);
 
-		realtimeSubscription.current = subscription;
-	}, [roomId]);
-
-	// Load participants helper function
-	const loadParticipants = useCallback(async (roomData: ParallelRoom) => {
-		if (roomData.current_participants.length > 0) {
-			const { data: participantsData } = await supabase
-				.from("users")
-				.select("id, display_name, care_score, preferences")
-				.in("id", roomData.current_participants);
-
-			const participantsList = participantsData || [];
-			setParticipants(participantsList);
-			// Update ref immediately
-			participantsRef.current = participantsList;
-			console.log("Updated participants:", participantsList);
-		} else {
-			setParticipants([]);
-			participantsRef.current = [];
-		}
-	}, []);
-
-	// Reconnect real-time subscription
-	const reconnectRealtime = useCallback(() => {
-		if (realtimeSubscription.current) {
-			realtimeSubscription.current.unsubscribe();
+		if (otherParticipants.length === 0) {
+			Alert.alert(
+				"No Other Participants",
+				"There are no other users to encourage right now."
+			);
+			return;
 		}
 
-		// Recreate the subscription
-		const subscription = supabase
-			.channel(`room_${roomId}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "INSERT",
-					schema: "public",
-					table: "room_messages",
-					filter: `room_id=eq.${roomId}`,
-				},
-				(payload: any) => {
-					console.log("New message received:", payload.new);
-					handleNewMessage(payload.new as RoomMessage);
-				}
-			)
-			.on(
-				"postgres_changes",
-				{
-					event: "UPDATE",
-					schema: "public",
-					table: "parallel_rooms",
-					filter: `id=eq.${roomId}`,
-				},
-				(payload: any) => {
-					console.log("Room updated:", payload.new);
-					setRoom(payload.new as ParallelRoom);
-					// When room updates (like new user joining), refresh participants
-					loadParticipants(payload.new as ParallelRoom);
-				}
-			)
-			.subscribe((status: string) => {
-				console.log("Subscription status:", status);
-				if (status === "SUBSCRIBED") {
-					setConnectionStatus((prev) => ({
-						...prev,
-						isConnected: true,
-						retryCount: 0,
-					}));
-					setShowConnectionError(false);
-				} else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-					setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
-					setShowConnectionError(true);
-				}
-			});
+		const options = otherParticipants.map((p) => ({
+			text: p.display_name,
+			onPress: () => {
+				setSelectedParticipant(p.id);
+				setShowNudgeModal(true);
+			},
+		}));
 
-		realtimeSubscription.current = subscription;
-	}, [roomId]);
+		Alert.alert("Send Encouragement", "Choose someone to encourage:", [
+			...options,
+			{ text: "Cancel", style: "cancel" },
+		]);
+	}, [participants, user]);
 
-	// Check connection status
-	const checkConnection = useCallback(async () => {
-		try {
-			const { data, error } = await supabase
-				.from("parallel_rooms")
-				.select("id")
-				.eq("id", roomId)
-				.single();
-
-			const isConnected = !error && !!data;
-
-			setConnectionStatus((prev) => ({
-				...prev,
-				isConnected,
-				lastCheck: new Date(),
-				retryCount: isConnected ? 0 : prev.retryCount + 1,
-			}));
-
-			if (!isConnected) {
-				setShowConnectionError(true);
-				// Attempt to reconnect real-time subscription
-				reconnectRealtime();
-			} else {
-				setShowConnectionError(false);
-			}
-
-			return isConnected;
-		} catch (error) {
-			console.error("Connection check failed:", error);
-			setConnectionStatus((prev) => ({
-				...prev,
-				isConnected: false,
-				lastCheck: new Date(),
-				retryCount: prev.retryCount + 1,
-			}));
-			setShowConnectionError(true);
-			return false;
-		}
-	}, [roomId, reconnectRealtime]);
-
-	// Pull to refresh handler
-	const onRefresh = useCallback(async () => {
-		setRefreshing(true);
-		try {
-			await refreshMessages();
-		} finally {
-			setRefreshing(false);
-		}
-	}, []);
-
-	// Handle new incoming messages
+	// Handle new message from real-time subscription
 	const handleNewMessage = useCallback((newMsg: RoomMessage) => {
-		// For real-time messages, fetch user name immediately and then add to messages
 		const addMessageWithUserName = async () => {
 			try {
-				console.log("Fetching user name for user_id:", newMsg.user_id);
-
-				// Fetch the user's display name from the database
-				const { data: userData, error } = await supabase
+				// Get user name for the message
+				const { data: userData } = await supabase
 					.from("users")
 					.select("display_name")
 					.eq("id", newMsg.user_id)
 					.single();
 
-				if (error) {
-					console.error("Error fetching user data:", error);
-				}
-
 				const user_name = userData?.display_name || "Anonymous";
-				console.log("Found user name:", user_name);
 
 				setMessages((prev) => {
-					// Check if message already exists to prevent duplicates
+					// Prevent duplicate messages
 					const exists = prev.some((msg) => msg.id === newMsg.id);
 					if (exists) return prev;
 
@@ -533,82 +231,63 @@ export default function RoomDetailScreen({
 		addMessageWithUserName();
 	}, []);
 
-	// Periodic message refresh
-	const refreshMessages = useCallback(async () => {
+	// Leave room function
+	const leaveRoom = useCallback(async () => {
+		if (!user || !room) return;
+
 		try {
-			// First get messages without join
-			const { data, error } = await supabase
-				.from("room_messages")
-				.select("*")
-				.eq("room_id", roomId)
-				.order("created_at", { ascending: true })
-				.limit(100);
+			const updatedParticipants = room.current_participants.filter(
+				(id: string) => id !== user.id
+			);
+
+			const { error } = await supabase
+				.from("parallel_rooms")
+				.update({ current_participants: updatedParticipants })
+				.eq("id", roomId);
 
 			if (error) throw error;
 
-			// Get all unique user IDs from messages
-			const userIds = Array.from(
-				new Set(data?.map((msg) => msg.user_id) || [])
-			);
-
-			// Fetch user data for all users
-			const { data: users, error: userError } = await supabase
-				.from("users")
-				.select("id, display_name")
-				.in("id", userIds);
-
-			if (userError) {
-				console.error("Error fetching users:", userError);
-			}
-
-			// Create user lookup map
-			const userMap = new Map();
-			(users || []).forEach((user) => {
-				userMap.set(user.id, user);
+			// Record interaction for care score
+			await supabase.from("user_interactions").insert({
+				user_id: user.id,
+				interaction_type: "room_participated",
+				points: 1,
 			});
 
-			// Format messages with user names
-			const formattedMessages = (data || []).map((msg) => ({
-				...msg,
-				timestamp: msg.created_at,
-				user_name: userMap.get(msg.user_id)?.display_name || "Anonymous",
-			}));
-
-			setMessages(formattedMessages);
-			console.log(
-				"Refreshed messages with user names:",
-				formattedMessages.length
-			);
+			console.log("Successfully left room");
 		} catch (error) {
-			console.error("Error refreshing messages:", error);
+			console.error("Error leaving room:", error);
+			throw error;
 		}
-	}, [roomId]);
+	}, [user, room, roomId]);
 
-	// Retry mechanism for sending messages
+	// Send message with retry logic
 	const sendMessageWithRetry = useCallback(
-		async (content: string, retries = 3): Promise<boolean> => {
-			if (!user || !content.trim()) return false;
+		async (content: string, retries: number = 3): Promise<boolean> => {
+			if (!user) return false;
+
+			setIsRetrying(true);
 
 			for (let attempt = 1; attempt <= retries; attempt++) {
 				try {
-					setIsRetrying(attempt > 1);
+					console.log(`Send message attempt ${attempt}/${retries}`);
 
-					// Always fetch fresh room data to avoid stale state
-					const { data: freshRoomData, error: roomError } = await supabase
+					// First verify user is still in room, if not try to rejoin
+					const { data: currentRoom } = await supabase
 						.from("parallel_rooms")
 						.select("current_participants")
 						.eq("id", roomId)
 						.single();
 
-					if (roomError) {
-						console.error("Failed to fetch room data:", roomError);
-						throw new Error("Could not verify room membership");
-					}
+					if (
+						!currentRoom ||
+						!currentRoom.current_participants.includes(user.id)
+					) {
+						console.log(
+							"User not in room participants list, attempting to rejoin..."
+						);
 
-					if (!freshRoomData?.current_participants.includes(user.id)) {
-						// User is not in room - try to rejoin automatically
-						console.log("User not in room, attempting to rejoin...");
-
+						// Try to rejoin the room
 						const { data: roomToJoin, error: joinRoomError } = await supabase
 							.from("parallel_rooms")
 							.select("*")
@@ -691,41 +370,159 @@ export default function RoomDetailScreen({
 		[user, roomId]
 	);
 
-	// Send message handler
-	const sendMessage = useCallback(async () => {
-		if (!newMessage.trim() || isRetrying) return;
+	// Periodic message refresh
+	const refreshMessages = useCallback(async () => {
+		try {
+			// First get messages without join
+			const { data, error } = await supabase
+				.from("room_messages")
+				.select("*")
+				.eq("room_id", roomId)
+				.order("created_at", { ascending: true })
+				.limit(100);
 
-		const messageContent = newMessage.trim();
-		setNewMessage(""); // Clear input immediately for better UX
+			if (error) throw error;
 
-		const success = await sendMessageWithRetry(messageContent);
+			// Get all unique user IDs from messages
+			const userIds = Array.from(
+				new Set(data?.map((msg) => msg.user_id) || [])
+			);
 
-		if (success) {
-			// Force refresh messages after successful send
-			setTimeout(refreshMessages, 500);
-		} else {
-			// Restore message content if failed
-			setNewMessage(messageContent);
-		}
-	}, [newMessage, isRetrying, sendMessageWithRetry, refreshMessages]);
+			// Fetch user data for all users
+			const { data: users, error: userError } = await supabase
+				.from("users")
+				.select("id, display_name")
+				.in("id", userIds);
 
-	// App state change handler
-	const handleAppStateChange = useCallback(
-		(nextAppState: AppStateStatus) => {
-			if (
-				appStateRef.current.match(/inactive|background/) &&
-				nextAppState === "active"
-			) {
-				// App came back to foreground - refresh everything
-				console.log("App became active - refreshing data");
-				checkConnection();
-				refreshMessages();
-				loadRoomData();
+			if (userError) throw userError;
+
+			// Create user lookup map
+			const userMap = new Map(users?.map((u) => [u.id, u.display_name]) || []);
+
+			// Combine messages with user names
+			const messagesWithUserNames =
+				data?.map((msg) => ({
+					...msg,
+					timestamp: msg.created_at,
+					user_name: userMap.get(msg.user_id) || "Anonymous",
+				})) || [];
+
+			setMessages(messagesWithUserNames);
+
+			// Update last message ID
+			if (messagesWithUserNames.length > 0) {
+				const lastMsg = messagesWithUserNames[messagesWithUserNames.length - 1];
+				setLastMessageId(lastMsg.id);
 			}
-			appStateRef.current = nextAppState;
-		},
-		[checkConnection, refreshMessages]
-	);
+		} catch (error) {
+			console.error("Error refreshing messages:", error);
+		}
+	}, [roomId]);
+
+	// Setup real-time subscription with error handling
+	const setupRealtimeSubscription = useCallback(() => {
+		const subscription = supabase
+			.channel(`room_${roomId}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "room_messages",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload: any) => {
+					console.log("New message received:", payload.new);
+					handleNewMessage(payload.new as RoomMessage);
+				}
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "parallel_rooms",
+					filter: `id=eq.${roomId}`,
+				},
+				(payload: any) => {
+					console.log("Room updated:", payload.new);
+					setRoom(payload.new as ParallelRoom);
+					// When room updates (like new user joining), refresh participants
+					loadParticipants(payload.new as ParallelRoom);
+				}
+			)
+			.subscribe((status: string) => {
+				console.log("Subscription status:", status);
+				if (status === "SUBSCRIBED") {
+					setConnectionStatus((prev) => ({
+						...prev,
+						isConnected: true,
+						retryCount: 0,
+					}));
+					setShowConnectionError(false);
+				} else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+					setConnectionStatus((prev) => ({ ...prev, isConnected: false }));
+					setShowConnectionError(true);
+				}
+			});
+
+		realtimeSubscription.current = subscription;
+	}, [roomId, handleNewMessage]);
+
+	// Load participants helper function
+	const loadParticipants = useCallback(async (roomData: ParallelRoom) => {
+		if (roomData.current_participants.length > 0) {
+			const { data: participantsData } = await supabase
+				.from("users")
+				.select("id, display_name, care_score, preferences")
+				.in("id", roomData.current_participants);
+
+			const participantsList = participantsData || [];
+			setParticipants(participantsList);
+			// Update ref immediately
+			participantsRef.current = participantsList;
+			console.log("Updated participants:", participantsList);
+		} else {
+			setParticipants([]);
+			participantsRef.current = [];
+		}
+	}, []);
+
+	// Check connection status
+	const checkConnection = useCallback(async () => {
+		try {
+			const { data, error } = await supabase
+				.from("parallel_rooms")
+				.select("id")
+				.eq("id", roomId)
+				.single();
+
+			const isConnected = !error && !!data;
+
+			setConnectionStatus((prev) => ({
+				...prev,
+				isConnected,
+				lastCheck: new Date(),
+				retryCount: isConnected ? 0 : prev.retryCount + 1,
+			}));
+
+			if (!isConnected) {
+				setShowConnectionError(true);
+			}
+
+			return isConnected;
+		} catch (error) {
+			console.error("Connection check failed:", error);
+			setConnectionStatus((prev) => ({
+				...prev,
+				isConnected: false,
+				lastCheck: new Date(),
+				retryCount: prev.retryCount + 1,
+			}));
+			setShowConnectionError(true);
+			return false;
+		}
+	}, [roomId]);
 
 	// Load room data
 	const loadRoomData = useCallback(async () => {
@@ -804,79 +601,68 @@ export default function RoomDetailScreen({
 
 					if (!updateError) {
 						roomData.current_participants = updatedParticipants;
-						console.log("Successfully auto-joined room");
+						console.log("Successfully joined room");
 					} else {
-						console.error("Failed to auto-join room:", updateError);
+						console.error("Failed to join room:", updateError);
 					}
 				}
 			}
 
 			setRoom(roomData);
-
-			// Load participants using the helper function
 			await loadParticipants(roomData);
-
-			// Load messages after participants are set
-			await refreshMessages();
 		} catch (error) {
-			console.error("Error loading room:", error);
-			Alert.alert("Error", "Failed to load room data");
-			navigation.goBack();
+			console.error("Error loading room data:", error);
+			Alert.alert("Error", "Failed to load room. Please try again.");
 		} finally {
 			setLoading(false);
 		}
-	}, [roomId, navigation, refreshMessages]);
+	}, [roomId, loadParticipants]);
 
-	// Start presence timer
-	const startPresenceTimer = useCallback(() => {
-		setPresenceTimer(0);
-		presenceInterval.current = setInterval(() => {
-			setPresenceTimer((prev) => prev + 1);
-		}, 1000);
+	// Send message handler
+	const sendMessage = useCallback(async () => {
+		if (!newMessage.trim() || isRetrying) return;
 
-		Animated.loop(
-			Animated.sequence([
-				Animated.timing(presenceAnimation, {
-					toValue: 1,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-				Animated.timing(presenceAnimation, {
-					toValue: 0.5,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-			])
-		).start();
-	}, [presenceAnimation]);
+		const messageContent = newMessage.trim();
+		setNewMessage(""); // Clear input immediately for better UX
 
-	// Leave room handler
-	const leaveRoom = useCallback(async () => {
-		if (!user || !room) return;
+		const success = await sendMessageWithRetry(messageContent);
 
-		try {
-			const updatedParticipants = room.current_participants.filter(
-				(id) => id !== user.id
-			);
-
-			const { error } = await supabase
-				.from("parallel_rooms")
-				.update({ current_participants: updatedParticipants })
-				.eq("id", roomId);
-
-			if (error) {
-				throw error;
-			}
-		} catch (error) {
-			console.error("Error leaving room:", error);
-			throw error;
+		if (success) {
+			// Force refresh messages after successful send
+			setTimeout(refreshMessages, 500);
+		} else {
+			// Restore message content if failed
+			setNewMessage(messageContent);
 		}
-	}, [user, room, roomId]);
+	}, [newMessage, isRetrying, sendMessageWithRetry, refreshMessages]);
 
-	// Handle leave room button
-	const handleLeaveRoom = useCallback(async () => {
-		if (!user || !room) return;
+	// App state change handler
+	const handleAppStateChange = useCallback(
+		(nextAppState: AppStateStatus) => {
+			if (
+				appStateRef.current.match(/inactive|background/) &&
+				nextAppState === "active"
+			) {
+				// App came back to foreground - refresh everything
+				console.log("App became active - refreshing data");
+				checkConnection();
+				refreshMessages();
+				loadRoomData();
+			}
+			appStateRef.current = nextAppState;
+		},
+		[checkConnection, refreshMessages, loadRoomData]
+	);
 
+	// Pull to refresh
+	const onRefresh = useCallback(async () => {
+		setRefreshing(true);
+		await Promise.all([refreshMessages(), loadRoomData()]);
+		setRefreshing(false);
+	}, [refreshMessages, loadRoomData]);
+
+	// Handle leave room confirmation
+	const handleLeaveRoom = useCallback(() => {
 		Alert.alert("Leave Room", "Are you sure you want to leave this room?", [
 			{ text: "Cancel", style: "cancel" },
 			{
@@ -893,7 +679,7 @@ export default function RoomDetailScreen({
 				},
 			},
 		]);
-	}, [user, room, leaveRoom, navigation]);
+	}, [leaveRoom, navigation]);
 
 	// Format helper functions
 	const formatPresenceTime = useCallback((seconds: number) => {
@@ -972,89 +758,265 @@ export default function RoomDetailScreen({
 				</View>
 			);
 		},
-		[user, theme, styles, formatMessageTime]
+		[user?.id, theme.colors, formatMessageTime]
 	);
 
-	// Update participants ref when participants change
-	useEffect(() => {
-		participantsRef.current = participants;
-	}, [participants]);
-
-	// Initialize component
+	// Effects
 	useEffect(() => {
 		loadRoomData();
-		startPresenceTimer();
+		setupRealtimeSubscription();
 
+		// Setup presence timer animation
+		const presenceAnimationLoop = () => {
+			Animated.sequence([
+				Animated.timing(presenceAnimation, {
+					toValue: 1,
+					duration: 2000,
+					useNativeDriver: true,
+				}),
+				Animated.timing(presenceAnimation, {
+					toValue: 0.5,
+					duration: 2000,
+					useNativeDriver: true,
+				}),
+			]).start(() => presenceAnimationLoop());
+		};
+		presenceAnimationLoop();
+
+		// Start presence timer
+		presenceInterval.current = setInterval(() => {
+			setPresenceTimer((prev) => prev + 1);
+		}, 1000);
+
+		// Setup app state listener
 		const subscription = AppState.addEventListener(
 			"change",
 			handleAppStateChange
 		);
 
 		return () => {
-			subscription?.remove();
 			if (realtimeSubscription.current) {
 				realtimeSubscription.current.unsubscribe();
 			}
 			if (presenceInterval.current) {
 				clearInterval(presenceInterval.current);
 			}
-			leaveRoom();
+			subscription.remove();
 		};
 	}, []);
 
-	// Force refresh messages after initial load
 	useEffect(() => {
-		if (!loading && roomId) {
-			setTimeout(() => {
-				refreshMessages();
-			}, 1000);
-		}
-	}, [loading, roomId, refreshMessages]);
+		refreshMessages();
+	}, [refreshMessages]);
 
-	// Connection monitoring
-	useEffect(() => {
-		const interval = setInterval(() => {
-			checkConnection();
-		}, 30000); // Check every 30 seconds
-		return () => clearInterval(interval);
-	}, [roomId, checkConnection]);
-
-	// Periodic message refresh
-	useEffect(() => {
-		const interval = setInterval(() => {
-			refreshMessages();
-		}, 10000); // Refresh messages every 10 seconds
-		return () => clearInterval(interval);
-	}, [roomId, refreshMessages]);
-
-	// Setup realtime subscription when room loads
-	useEffect(() => {
-		if (roomId && !loading) {
-			setupRealtimeSubscription();
-		}
-
-		return () => {
-			if (realtimeSubscription.current) {
-				realtimeSubscription.current.unsubscribe();
-			}
-		};
-	}, [roomId, loading, setupRealtimeSubscription]);
-
-	if (loading) {
-		return (
-			<View
-				style={[
-					styles.container,
-					{ justifyContent: "center", alignItems: "center" },
-				]}
-			>
-				<Text>Loading...</Text>
-			</View>
-		);
-	}
+	// Styles
+	const styles = useMemo(
+		() =>
+			StyleSheet.create({
+				container: {
+					flex: 1,
+					backgroundColor: theme.colors.background,
+				},
+				header: {
+					backgroundColor: theme.colors.surface,
+					elevation: 4,
+					paddingTop: 40,
+					paddingBottom: 16,
+					paddingHorizontal: 16,
+				},
+				headerContent: {
+					flexDirection: "row",
+					justifyContent: "space-between",
+					alignItems: "center",
+				},
+				backButton: {
+					margin: 0,
+				},
+				headerCenter: {
+					flex: 1,
+					alignItems: "center",
+				},
+				headerActions: {
+					flexDirection: "row",
+					alignItems: "center",
+				},
+				nudgeButton: {
+					margin: 0,
+				},
+				roomTitle: {
+					color: theme.colors.primary,
+					fontWeight: "bold",
+				},
+				presenceTime: {
+					color: theme.colors.outline,
+					marginTop: 4,
+				},
+				connectionSection: {
+					backgroundColor: theme.colors.surface,
+					paddingHorizontal: 16,
+					paddingVertical: 8,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				connectionContent: {
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "center",
+				},
+				connectionIndicator: {
+					width: 8,
+					height: 8,
+					borderRadius: 4,
+					marginRight: 8,
+				},
+				connected: {
+					backgroundColor: "#4CAF50",
+				},
+				disconnected: {
+					backgroundColor: "#F44336",
+				},
+				connectionText: {
+					color: theme.colors.outline,
+					fontSize: 12,
+				},
+				participantsSection: {
+					backgroundColor: theme.colors.surface,
+					paddingHorizontal: 16,
+					paddingVertical: 8,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				participantsContent: {
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "space-between",
+				},
+				participantsLabel: {
+					color: theme.colors.primary,
+					fontWeight: "500",
+				},
+				participantsList: {
+					flexDirection: "row",
+					flexWrap: "wrap",
+					gap: 4,
+				},
+				participantAvatar: {
+					backgroundColor: theme.colors.primaryContainer,
+				},
+				messagesContainer: {
+					flex: 1,
+					backgroundColor: theme.colors.surface,
+				},
+				messagesHeader: {
+					padding: 16,
+					paddingBottom: 8,
+					borderBottomWidth: 1,
+					borderBottomColor: theme.colors.outline + "20",
+				},
+				sectionTitle: {
+					color: theme.colors.primary,
+					fontWeight: "bold",
+				},
+				messagesList: {
+					flex: 1,
+					paddingHorizontal: 16,
+				},
+				emptyMessages: {
+					flex: 1,
+					alignItems: "center",
+					justifyContent: "center",
+					paddingHorizontal: 32,
+				},
+				emptyText: {
+					color: theme.colors.outline,
+					textAlign: "center",
+					marginTop: 16,
+				},
+				messageItem: {
+					marginVertical: 4,
+					paddingHorizontal: 4,
+				},
+				ownMessage: {
+					alignItems: "flex-end",
+				},
+				otherMessage: {
+					alignItems: "flex-start",
+				},
+				ownMessageContent: {
+					maxWidth: "80%",
+					padding: 12,
+					borderRadius: 16,
+					backgroundColor: theme.colors.primary,
+				},
+				otherMessageContent: {
+					maxWidth: "80%",
+					padding: 12,
+					borderRadius: 16,
+					backgroundColor: theme.colors.surfaceVariant,
+				},
+				ownMessageText: {
+					color: theme.colors.onPrimary,
+				},
+				otherMessageText: {
+					color: theme.colors.onSurfaceVariant,
+				},
+				messageTimestamp: {
+					marginTop: 4,
+					marginHorizontal: 8,
+				},
+				ownMessageTimestamp: {
+					color: theme.colors.outline,
+					alignSelf: "flex-end",
+				},
+				otherMessageTimestamp: {
+					color: theme.colors.outline,
+					alignSelf: "flex-start",
+				},
+				inputContainer: {
+					padding: 16,
+					backgroundColor: theme.colors.surface,
+					borderTopWidth: 1,
+					borderTopColor: theme.colors.outline + "20",
+				},
+				messageInput: {
+					backgroundColor: theme.colors.background,
+				},
+				nudgeModalContainer: {
+					backgroundColor: theme.colors.surface,
+					padding: 24,
+					margin: 20,
+					borderRadius: 16,
+				},
+				nudgeModalTitle: {
+					color: theme.colors.primary,
+					fontWeight: "bold",
+					textAlign: "center",
+					marginBottom: 8,
+				},
+				nudgeModalSubtitle: {
+					color: theme.colors.outline,
+					textAlign: "center",
+					marginBottom: 16,
+				},
+				nudgeInput: {
+					backgroundColor: theme.colors.surfaceVariant,
+					marginBottom: 16,
+					minHeight: 100,
+				},
+				nudgeModalActions: {
+					flexDirection: "row",
+					justifyContent: "space-between",
+					gap: 12,
+				},
+				nudgeModalButton: {
+					flex: 1,
+				},
+			}),
+		[theme]
+	);
 
 	return (
-		<View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+		<View style={styles.container}>
 			<KeyboardAvoidingView
 				style={styles.container}
 				behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -1078,12 +1040,20 @@ export default function RoomDetailScreen({
 								</Text>
 							</Animated.View>
 						</View>
-						<IconButton
-							icon="exit-to-app"
-							size={24}
-							onPress={handleLeaveRoom}
-							style={styles.backButton}
-						/>
+						<View style={styles.headerActions}>
+							<IconButton
+								icon="heart-plus"
+								size={24}
+								onPress={showNudgeOptions}
+								style={styles.nudgeButton}
+							/>
+							<IconButton
+								icon="exit-to-app"
+								size={24}
+								onPress={handleLeaveRoom}
+								style={styles.backButton}
+							/>
+						</View>
 					</View>
 				</Surface>
 
@@ -1200,6 +1170,51 @@ export default function RoomDetailScreen({
 				>
 					Connection lost. Messages may not sync.
 				</Snackbar>
+
+				{/* Nudge Modal */}
+				<Portal>
+					<Modal
+						visible={showNudgeModal}
+						onDismiss={() => setShowNudgeModal(false)}
+						contentContainerStyle={styles.nudgeModalContainer}
+					>
+						<Text variant="titleMedium" style={styles.nudgeModalTitle}>
+							Send Encouragement
+						</Text>
+						<Text variant="bodyMedium" style={styles.nudgeModalSubtitle}>
+							Send a gentle nudge to brighten someone's day
+						</Text>
+
+						<TextInput
+							value={nudgeMessage}
+							onChangeText={setNudgeMessage}
+							placeholder="Your encouraging message..."
+							multiline
+							style={styles.nudgeInput}
+							maxLength={200}
+						/>
+
+						<View style={styles.nudgeModalActions}>
+							<Button
+								mode="outlined"
+								onPress={() => setShowNudgeModal(false)}
+								style={styles.nudgeModalButton}
+							>
+								Cancel
+							</Button>
+							<Button
+								mode="contained"
+								onPress={() =>
+									selectedParticipant &&
+									sendNudge(selectedParticipant, nudgeMessage)
+								}
+								style={styles.nudgeModalButton}
+							>
+								Send
+							</Button>
+						</View>
+					</Modal>
+				</Portal>
 			</KeyboardAvoidingView>
 		</View>
 	);

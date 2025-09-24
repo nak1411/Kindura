@@ -1,21 +1,18 @@
-// src/types/index.ts
+// src/types/index.ts - Updated with nudge system types
 export interface User {
   id: string;
   email: string;
   phone?: string;
   display_name: string;
   care_score: number;
-  preferences: {
-    voice_comfort?: boolean;
-    video_comfort?: boolean;
-    topics_to_avoid?: string[];
-    faith_preferences?: string;
-    prayer?: PrayerPreferences;
-  };
+  nudges_sent?: number;
+  rooms_participated?: number;
+  current_streak?: number;
   bio?: string;
   location_lat?: number;
   location_lng?: number;
   location_sharing?: boolean;
+  notifications_enabled?: boolean;
   last_active: string;
   created_at: string;
   updated_at: string;
@@ -28,9 +25,7 @@ export interface ParallelRoom {
   description?: string;
   current_participants: string[];
   max_capacity: number;
-  ambient_sound?: string;
   prompt_of_moment?: string;
-  faith_content: boolean;
   is_active: boolean;
   created_at: string;
 }
@@ -105,16 +100,61 @@ export interface RoomParticipant {
   user?: User;
 }
 
+// Updated and enhanced Nudge interface
 export interface Nudge {
   id: string;
   from_user_id: string;
   to_user_id: string;
   message: string;
-  nudge_type: 'encouragement' | 'check_in' | 'prayer_reminder';
+  nudge_type: 'encouragement' | 'check_in' | 'prayer_reminder' | 'gentle_nudge';
   is_read: boolean;
   created_at: string;
+  updated_at?: string;
   from_user?: User;
   to_user?: User;
+}
+
+// New interface for user room participation tracking
+export interface UserRoomHistory {
+  id: string;
+  user_id: string;
+  room_id: string;
+  first_joined_at: string;
+  created_at: string;
+}
+
+// Enhanced User Interactions interface for care score tracking
+export interface UserInteraction {
+  id: string;
+  user_id: string;
+  interaction_type: 'room_participated' | 'nudge_sent' | 'nudge_received' | 'prayer_partner_matched' | 'message_sent';
+  points: number;
+  metadata?: {
+    room_id?: string;
+    nudge_id?: string;
+    partnership_id?: string;
+    message_id?: string;
+  };
+  created_at: string;
+}
+
+// Dashboard-specific types
+export interface DashboardStats {
+  roomsJoined: number;
+  nudgesSent: number;
+  prayerPartners: number;
+  careScore: number;
+  currentStreak: number;
+}
+
+export interface RecentActivity {
+  id: string;
+  type: 'room' | 'nudge' | 'prayer' | 'partnership';
+  title: string;
+  description?: string;
+  time: string;
+  participants?: number;
+  icon?: string;
 }
 
 // Navigation types
@@ -143,3 +183,38 @@ export type PrayerStackParamList = {
   PrayerRequests: undefined;
   PartnerProfile: { partnerId: string };
 };
+
+// Additional utility types for the nudge system
+export type NudgeType = 'encouragement' | 'check_in' | 'prayer_reminder' | 'gentle_nudge';
+
+export interface CreateNudgeParams {
+  to_user_id: string;
+  message: string;
+  nudge_type: NudgeType;
+}
+
+export interface NudgeNotification {
+  id: string;
+  nudge_id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+// Room message types for the chat system
+export interface RoomMessage {
+  id: string;
+  room_id: string;
+  user_id: string;
+  content: string;
+  message_type: 'text' | 'gentle_nudge' | 'reflection' | 'presence_update' | 'system_message';
+  created_at: string;
+  updated_at?: string;
+  user?: Pick<User, 'id' | 'display_name'>;
+  metadata?: {
+    nudge_id?: string;
+    activity_id?: string;
+  };
+}

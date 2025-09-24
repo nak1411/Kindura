@@ -5,7 +5,6 @@ export interface RoomParticipant {
 	id: string;
 	display_name: string;
 	care_score: number;
-	preferences: User["preferences"];
 }
 
 export interface RoomActivity {
@@ -100,29 +99,76 @@ export const roomUtils = {
 				return { success: false, error: "Room not found" };
 			}
 
-			if (room.current_participants.includes(userId)) {
-				return { success: true }; // Already in room
-			}
+			const wasAlreadyInRoom = room.current_participants.includes(userId);
 
-			if (room.current_participants.length >= room.max_capacity) {
-				return { success: false, error: "Room is at capacity" };
-			}
+			if (!wasAlreadyInRoom) {
+				if (room.current_participants.length >= room.max_capacity) {
+					return { success: false, error: "Room is at capacity" };
+				}
 
-			const updatedParticipants = [...room.current_participants, userId];
+				const updatedParticipants = [...room.current_participants, userId];
 
-			const { error: updateError } = await supabase
-				.from("parallel_rooms")
-				.update({ current_participants: updatedParticipants })
-				.eq("id", roomId);
+				const { error: updateError } = await supabase
+					.from("parallel_rooms")
+					.update({ current_participants: updatedParticipants })
+					.eq("id", roomId);
 
-			if (updateError) {
-				return { success: false, error: updateError.message };
+				if (updateError) {
+					return { success: false, error: updateError.message };
+				}
+
+				// Track unique room participation
+				await this.trackUniqueRoomJoin(userId, roomId);
 			}
 
 			return { success: true };
 		} catch (error) {
 			console.error("Error joining room:", error);
 			return { success: false, error: "Failed to join room" };
+		}
+	},
+
+	async trackUniqueRoomJoin(userId: string, roomId: string): Promise<void> {
+		try {
+			// Check if user has ever joined this specific room before
+			const { data: existingRecord } = await supabase
+				.from("user_room_history")
+				.select("id")
+				.eq("user_id", userId)
+				.eq("room_id", roomId)
+				.single();
+
+			// If no existing record, this is a unique room join
+			if (!existingRecord) {
+				// Insert room history record
+				await supabase.from("user_room_history").insert({
+					user_id: userId,
+					room_id: roomId,
+					first_joined_at: new Date().toISOString(),
+				});
+
+				// Increment user's unique rooms count
+				const { data: userData } = await supabase
+					.from("users")
+					.select("rooms_participated")
+					.eq("id", userId)
+					.single();
+
+				const currentCount = userData?.rooms_participated || 0;
+
+				await supabase
+					.from("users")
+					.update({ rooms_participated: currentCount + 1 })
+					.eq("id", userId);
+
+				console.log(
+					`User ${userId} joined unique room ${roomId}. Total: ${
+						currentCount + 1
+					}`
+				);
+			}
+		} catch (error) {
+			console.error("Error tracking unique room join:", error);
 		}
 	},
 
