@@ -415,6 +415,14 @@ export default function DebugScreen({ navigation }: any) {
 					>
 						Back to Profile
 					</Button>
+
+					<Button
+						mode="contained"
+						onPress={() => navigation.navigate("Simulation")}
+						style={{ margin: 16 }}
+					>
+						User Simulation
+					</Button>
 				</Surface>
 			</ScrollView>
 		</SafeAreaView>

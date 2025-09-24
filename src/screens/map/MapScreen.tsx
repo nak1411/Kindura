@@ -163,13 +163,20 @@ export default function MapScreen() {
 		if (!currentLocation || !user?.location_sharing) return;
 
 		try {
+			console.log("Loading user density from users table...");
 			// Convert miles to kilometers (1 mile = 1.60934 km)
 			const radiusInKm = radiusInMiles * 1.60934;
 
+			console.log("About to query users table with these params:", {
+				location_sharing: true,
+				user_id_to_exclude: user.id,
+				has_location: "location_lat and location_lng not null",
+				active_since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+			});
+
 			const { data, error } = await supabase
-				.from("users")
+				.from("all_users_for_map")
 				.select("id, location_lat, location_lng")
-				.eq("location_sharing", true)
 				.neq("id", user.id)
 				.not("location_lat", "is", null)
 				.not("location_lng", "is", null)
@@ -178,7 +185,17 @@ export default function MapScreen() {
 					new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 				);
 
-			if (error) throw error;
+			console.log(
+				"Query completed. Error:",
+				error,
+				"Data count:",
+				data?.length
+			);
+
+			if (error) {
+				console.error("Detailed error:", JSON.stringify(error, null, 2));
+				throw error;
+			}
 
 			// Count users within radius
 			const usersInRadius =

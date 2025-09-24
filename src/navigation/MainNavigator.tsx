@@ -6,7 +6,7 @@ import DashboardScreen from "../screens/dashboard/DashboardScreen";
 import RoomsNavigator from "./RoomsNavigator";
 import PrayerPartnersNavigator from "./PrayerPartnersNavigator";
 import MapScreen from "../screens/map/MapScreen";
-import DebugScreen from "../screens/debug/DebugScreen";
+import DebugNavigator from "./DebugNavigator";
 import { useTheme } from "../constants/theme-context";
 
 const Tab = createBottomTabNavigator();
@@ -58,7 +58,7 @@ export default function MainNavigator() {
 				options={{ tabBarLabel: "Prayer Partners" }}
 			/>
 			<Tab.Screen name="Map" component={MapScreen} />
-			{__DEV__ && <Tab.Screen name="Debug" component={DebugScreen} />}
+			{__DEV__ && <Tab.Screen name="Debug" component={DebugNavigator} />}
 		</Tab.Navigator>
 	);
 }

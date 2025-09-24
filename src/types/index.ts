@@ -218,3 +218,8 @@ export interface RoomMessage {
     activity_id?: string;
   };
 }
+
+export interface SimulatedUser extends User {
+  personality: 'encouraging' | 'thoughtful' | 'prayer_focused' | 'casual';
+  activity_level: 'high' | 'medium' | 'low';
+}
