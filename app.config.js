@@ -33,6 +33,10 @@ export default {
 				"CAMERA",
 				"RECORD_AUDIO",
 			],
+			softwareKeyboard: {
+				mode: "adjustResize",
+				windowSoftInputMode: "adjustResize",
+			},
 		},
 		web: {
 			favicon: "./assets/favicon.png",

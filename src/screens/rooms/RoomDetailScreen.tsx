@@ -1042,158 +1042,165 @@ export default function RoomDetailScreen({
 
 	if (loading) {
 		return (
-			<View style={[styles.container, { justifyContent: "center" }]}>
+			<View
+				style={[
+					styles.container,
+					{ justifyContent: "center", alignItems: "center" },
+				]}
+			>
 				<Text>Loading...</Text>
 			</View>
 		);
 	}
 
 	return (
-		<KeyboardAvoidingView
-			style={styles.container}
-			behavior={Platform.OS === "ios" ? "padding" : "height"}
-		>
-			{/* Header */}
-			<Surface style={styles.header}>
-				<View style={styles.headerContent}>
-					<IconButton
-						icon="arrow-left"
-						size={24}
-						onPress={() => navigation.goBack()}
-						style={styles.backButton}
-					/>
-					<View style={styles.headerCenter}>
-						<Text variant="titleMedium" style={styles.roomTitle}>
-							{room?.name || "Room"}
-						</Text>
-						<Animated.View style={{ opacity: presenceAnimation }}>
-							<Text variant="bodySmall" style={styles.presenceTime}>
-								Present: {formatPresenceTime(presenceTimer)}
+		<View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+			<KeyboardAvoidingView
+				style={styles.container}
+				behavior={Platform.OS === "ios" ? "padding" : "height"}
+			>
+				{/* Header */}
+				<Surface style={styles.header}>
+					<View style={styles.headerContent}>
+						<IconButton
+							icon="arrow-left"
+							size={24}
+							onPress={() => navigation.goBack()}
+							style={styles.backButton}
+						/>
+						<View style={styles.headerCenter}>
+							<Text variant="titleMedium" style={styles.roomTitle}>
+								{room?.name || "Room"}
 							</Text>
-						</Animated.View>
-					</View>
-					<IconButton
-						icon="exit-to-app"
-						size={24}
-						onPress={handleLeaveRoom}
-						style={styles.backButton}
-					/>
-				</View>
-			</Surface>
-
-			{/* Connection Status */}
-			<Surface style={styles.connectionSection}>
-				<View style={styles.connectionContent}>
-					<View
-						style={[
-							styles.connectionIndicator,
-							connectionStatus.isConnected
-								? styles.connected
-								: styles.disconnected,
-						]}
-					/>
-					<Text style={styles.connectionText}>
-						{connectionStatus.isConnected ? "Connected" : "Reconnecting..."}
-					</Text>
-				</View>
-			</Surface>
-
-			{/* Participants Section - Compact */}
-			{participants.length > 0 && (
-				<Surface style={styles.participantsSection}>
-					<View style={styles.participantsContent}>
-						<Text variant="bodySmall" style={styles.participantsLabel}>
-							Users ({participants.length}):
-						</Text>
-						<View style={styles.participantsList}>
-							{participants.map((participant) => (
-								<Avatar.Text
-									key={participant.id}
-									size={24}
-									label={participant.display_name.charAt(0).toUpperCase()}
-									style={styles.participantAvatar}
-								/>
-							))}
+							<Animated.View style={{ opacity: presenceAnimation }}>
+								<Text variant="bodySmall" style={styles.presenceTime}>
+									Present: {formatPresenceTime(presenceTimer)}
+								</Text>
+							</Animated.View>
 						</View>
+						<IconButton
+							icon="exit-to-app"
+							size={24}
+							onPress={handleLeaveRoom}
+							style={styles.backButton}
+						/>
 					</View>
 				</Surface>
-			)}
 
-			{/* Messages Section - Takes up most space */}
-			<Surface style={styles.messagesContainer}>
-				<View style={styles.messagesHeader}>
-					<Text variant="titleSmall" style={styles.sectionTitle}>
-						Chat
-					</Text>
-				</View>
-
-				{messages.length > 0 ? (
-					<FlatList
-						ref={messagesListRef}
-						data={messages}
-						renderItem={renderMessage}
-						keyExtractor={(item) => item.id}
-						style={styles.messagesList}
-						contentContainerStyle={{ paddingVertical: 16 }}
-						showsVerticalScrollIndicator={false}
-						refreshControl={
-							<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-						}
-					/>
-				) : (
-					<View style={styles.emptyMessages}>
-						<IconButton
-							icon="message-text-outline"
-							size={48}
-							iconColor={theme.colors.outline}
+				{/* Connection Status */}
+				<Surface style={styles.connectionSection}>
+					<View style={styles.connectionContent}>
+						<View
+							style={[
+								styles.connectionIndicator,
+								connectionStatus.isConnected
+									? styles.connected
+									: styles.disconnected,
+							]}
 						/>
-						<Text style={styles.emptyText}>
-							No messages yet.{"\n"}Send a message to connect with others.
+						<Text style={styles.connectionText}>
+							{connectionStatus.isConnected ? "Connected" : "Reconnecting..."}
 						</Text>
 					</View>
+				</Surface>
+
+				{/* Participants Section - Compact */}
+				{participants.length > 0 && (
+					<Surface style={styles.participantsSection}>
+						<View style={styles.participantsContent}>
+							<Text variant="bodySmall" style={styles.participantsLabel}>
+								Users ({participants.length}):
+							</Text>
+							<View style={styles.participantsList}>
+								{participants.map((participant) => (
+									<Avatar.Text
+										key={participant.id}
+										size={24}
+										label={participant.display_name.charAt(0).toUpperCase()}
+										style={styles.participantAvatar}
+									/>
+								))}
+							</View>
+						</View>
+					</Surface>
 				)}
 
-				{/* Message Input */}
-				<Surface style={styles.inputContainer}>
-					<TextInput
-						value={newMessage}
-						onChangeText={setNewMessage}
-						placeholder={isRetrying ? "Sending..." : "Send a message..."}
-						style={styles.messageInput}
-						textColor={theme.colors.onSurface}
-						multiline
-						disabled={isRetrying || !connectionStatus.isConnected}
-						right={
-							<TextInput.Icon
-								icon={isRetrying ? "loading" : "send"}
-								onPress={sendMessage}
-								disabled={
-									!newMessage.trim() ||
-									isRetrying ||
-									!connectionStatus.isConnected
-								}
-							/>
-						}
-						onSubmitEditing={sendMessage}
-					/>
-				</Surface>
-			</Surface>
+				{/* Messages Section - Takes up most space */}
+				<Surface style={styles.messagesContainer}>
+					<View style={styles.messagesHeader}>
+						<Text variant="titleSmall" style={styles.sectionTitle}>
+							Chat
+						</Text>
+					</View>
 
-			{/* Connection Error Snackbar */}
-			<Snackbar
-				visible={showConnectionError}
-				onDismiss={() => setShowConnectionError(false)}
-				duration={5000}
-				action={{
-					label: "Retry",
-					onPress: () => {
-						checkConnection();
-						refreshMessages();
-					},
-				}}
-			>
-				Connection lost. Messages may not sync.
-			</Snackbar>
-		</KeyboardAvoidingView>
+					{messages.length > 0 ? (
+						<FlatList
+							ref={messagesListRef}
+							data={messages}
+							renderItem={renderMessage}
+							keyExtractor={(item) => item.id}
+							style={styles.messagesList}
+							contentContainerStyle={{ paddingVertical: 16 }}
+							showsVerticalScrollIndicator={false}
+							refreshControl={
+								<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+							}
+						/>
+					) : (
+						<View style={styles.emptyMessages}>
+							<IconButton
+								icon="message-text-outline"
+								size={48}
+								iconColor={theme.colors.outline}
+							/>
+							<Text style={styles.emptyText}>
+								No messages yet.{"\n"}Send a message to connect with others.
+							</Text>
+						</View>
+					)}
+
+					{/* Message Input */}
+					<Surface style={styles.inputContainer}>
+						<TextInput
+							value={newMessage}
+							onChangeText={setNewMessage}
+							placeholder={isRetrying ? "Sending..." : "Send a message..."}
+							style={styles.messageInput}
+							textColor={theme.colors.onSurface}
+							multiline
+							disabled={isRetrying || !connectionStatus.isConnected}
+							right={
+								<TextInput.Icon
+									icon={isRetrying ? "loading" : "send"}
+									onPress={sendMessage}
+									disabled={
+										!newMessage.trim() ||
+										isRetrying ||
+										!connectionStatus.isConnected
+									}
+								/>
+							}
+							onSubmitEditing={sendMessage}
+						/>
+					</Surface>
+				</Surface>
+
+				{/* Connection Error Snackbar */}
+				<Snackbar
+					visible={showConnectionError}
+					onDismiss={() => setShowConnectionError(false)}
+					duration={5000}
+					action={{
+						label: "Retry",
+						onPress: () => {
+							checkConnection();
+							refreshMessages();
+						},
+					}}
+				>
+					Connection lost. Messages may not sync.
+				</Snackbar>
+			</KeyboardAvoidingView>
+		</View>
 	);
 }
