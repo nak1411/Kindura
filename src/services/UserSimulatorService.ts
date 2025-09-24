@@ -141,16 +141,24 @@ export class UserSimulatorService {
       
       console.log(`Created ${bots.length} bots`);
       
+      const intervalTime = this.getActivityInterval(config.activityLevel);
+      console.log(`🕐 Setting up activity interval: ${intervalTime}ms (${intervalTime/1000}s)`);
+      
       // Start intelligent activity loop
       const interval = setInterval(() => {
-        console.log('Running bot activity cycle...');
+        console.log(`⏰ Activity timer fired - running cycle for ${bots.length} bots...`);
         this.runIntelligentActivity(simulationId);
-      }, this.getActivityInterval(config.activityLevel));
+      }, intervalTime);
       
       this.activeIntervals.set(simulationId, interval);
       
+      console.log(`📊 Active intervals now: ${this.activeIntervals.size}`);
+      console.log(`📊 Active bot simulations: ${this.activeBots.size}`);
+      
       // Run initial activity immediately
+      console.log('🚀 Running initial activity...');
       setTimeout(() => {
+        console.log('🎬 Initial activity timeout fired');
         this.runIntelligentActivity(simulationId);
       }, 2000);
       
@@ -178,232 +186,200 @@ export class UserSimulatorService {
       );
       
       const bot: BotUser = {
-        id: generateUUID(), // Use proper UUID
+        id: generateUUID(),
         display_name: `${this.botNames[i % this.botNames.length]}${Math.floor(i / this.botNames.length) > 0 ? ` ${Math.floor(i / this.botNames.length) + 1}` : ''}`,
         location_lat: location.lat,
         location_lng: location.lng,
         location_sharing: true,
         last_active: new Date().toISOString(),
         personality: personalities[i],
-        activity_level: this.randomizeActivityLevel(config.activityLevel),
+        activity_level: config.activityLevel,
         response_speed: config.responseSpeed,
-        behaviors: config.behaviors
+        behaviors: { ...config.behaviors }
       };
       
       bots.push(bot);
-      this.allBotIds.add(bot.id); // Track this bot ID
-      console.log(`Creating bot: ${bot.display_name} (${bot.personality}) with ID: ${bot.id}`);
+      this.allBotIds.add(bot.id);
+    }
+    
+    // Generate proper UUIDs for bots first
+    for (const bot of bots) {
+      bot.id = generateUUID(); // Ensure each bot has a proper UUID
+      this.allBotIds.add(bot.id);
+    }
 
-      // Create bot by temporarily signing up as that user
-      const botEmail = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}@kindura.simulation`;
-      
+    // Try creating with auth users first
+    const createdBots: BotUser[] = [];
+    
+    for (const bot of bots) {
       try {
-        console.log('Creating bot through auth signup...');
-        
-        // Store current auth state
-        const { data: currentSession } = await supabase.auth.getSession();
-        
-        // Sign up as the bot user
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: botEmail,
-          password: 'TempBotPass123!',
-          options: {
-            data: {
-              display_name: bot.display_name,
-              is_simulated: true
-            }
-          }
+        // Method 1: Create auth user first
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+          email: `bot-${bot.id.substring(0, 8)}@simulated.local`,
+          password: `bot-pass-${Math.random().toString(36)}`,
+          user_metadata: {
+            display_name: bot.display_name,
+            is_simulated: true
+          },
+          email_confirm: true
         });
-        
-        if (signUpError || !signUpData.user) {
-          console.error('Bot signup failed:', signUpError);
-          continue;
+
+        if (!authError && authData.user) {
+          // Use auth user ID
+          const originalId = bot.id;
+          bot.id = authData.user.id;
+          this.allBotIds.delete(originalId);
+          this.allBotIds.add(bot.id);
+          
+          // Insert profile
+          const { error: profileError } = await supabase.from('users').insert({
+            id: bot.id,
+            display_name: bot.display_name,
+            location_lat: bot.location_lat,
+            location_lng: bot.location_lng,
+            location_sharing: bot.location_sharing,
+            last_active: bot.last_active,
+            is_simulated: true,
+            email: authData.user.email,
+            created_at: new Date().toISOString(),
+            care_score: Math.floor(Math.random() * 50) + 25
+          });
+          
+          if (!profileError) {
+            createdBots.push(bot);
+            console.log(`✅ Created bot ${bot.display_name} with auth user`);
+            continue;
+          }
         }
         
-        console.log(`Bot signed up: ${signUpData.user.id}`);
-        
-        // Update bot with the real user ID
-        bot.id = signUpData.user.id;
-        this.allBotIds.add(bot.id);
-        
-        // Create/update the user profile
-        const { error: profileError } = await supabase.from('users').upsert({
-          id: signUpData.user.id,
+        // Method 2: Try direct insert with generated ID
+        const { data: userData, error: directError } = await supabase.from('users').insert({
+          id: bot.id,
           display_name: bot.display_name,
-          email: botEmail,
           location_lat: bot.location_lat,
           location_lng: bot.location_lng,
           location_sharing: bot.location_sharing,
           last_active: bot.last_active,
-          is_simulated: true
-        });
+          is_simulated: true,
+          email: `bot-${bot.id.substring(0, 8)}@simulated.local`,
+          created_at: new Date().toISOString(),
+          care_score: Math.floor(Math.random() * 50) + 25
+        }).select('id');
         
-        if (profileError) {
-          console.error('Bot profile creation failed:', profileError);
-        } else {
-          console.log(`Bot ${bot.display_name} created successfully`);
+        if (!directError && userData?.[0]) {
+          createdBots.push(bot);
+          console.log(`✅ Created bot ${bot.display_name} with direct insert`);
+          continue;
         }
         
-        // Restore original session if we had one
-        if (currentSession.session) {
-          await supabase.auth.setSession(currentSession.session);
-        } else {
-          // Sign out the bot user to restore no-auth state
-          await supabase.auth.signOut();
-        }
-        
+        console.error(`Failed to create bot ${bot.display_name}:`, directError || authError);
       } catch (error) {
-        console.error('Exception creating bot:', error);
+        console.error(`Exception creating bot ${bot.display_name}:`, error);
       }
     }
+    
+    console.log(`✅ Successfully created ${createdBots.length} out of ${bots.length} bots`);
+    
+    // Update bots array to only include successfully created ones
+    bots.length = 0;
+    bots.push(...createdBots);
     
     return bots;
   }
 
   /**
-   * Distribute personalities based on percentages
-   */
-  private static distributePersonalities(
-    count: number, 
-    mix: AdvancedBotConfig['personalityMix']
-  ): BotUser['personality'][] {
-    const personalities: BotUser['personality'][] = [];
-    const types = Object.keys(mix) as (keyof typeof mix)[];
-    
-    types.forEach(type => {
-      const amount = Math.round((mix[type] / 100) * count);
-      for (let i = 0; i < amount; i++) {
-        personalities.push(type);
-      }
-    });
-    
-    // Fill remaining slots randomly
-    while (personalities.length < count) {
-      const randomType = types[Math.floor(Math.random() * types.length)];
-      personalities.push(randomType);
-    }
-    
-    // Shuffle array
-    return personalities.sort(() => Math.random() - 0.5);
-  }
-
-  /**
-   * Randomize individual bot activity levels
-   */
-  private static randomizeActivityLevel(baseLevel: AdvancedBotConfig['activityLevel']): BotUser['activity_level'] {
-    const variation = Math.random();
-    if (baseLevel === 'high') {
-      return variation > 0.7 ? 'medium' : 'high';
-    } else if (baseLevel === 'medium') {
-      if (variation > 0.8) return 'high';
-      if (variation < 0.2) return 'low';
-      return 'medium';
-    } else { // low
-      return variation > 0.7 ? 'medium' : 'low';
-    }
-  }
-
-  /**
-   * Get activity interval based on level
-   */
-  private static getActivityInterval(level: AdvancedBotConfig['activityLevel']): number {
-    const intervals = { low: 45000, medium: 25000, high: 15000 }; // milliseconds
-    return intervals[level];
-  }
-
-  /**
-   * Run intelligent bot activities
+   * Run intelligent activity cycle
    */
   private static async runIntelligentActivity(simulationId: string): Promise<void> {
     const bots = this.activeBots.get(simulationId);
     if (!bots || bots.length === 0) {
-      console.log('No bots found for simulation:', simulationId);
+      console.log(`❌ No bots found for simulation ${simulationId}`);
       return;
     }
 
-    console.log(`Running activity for ${bots.length} bots`);
+    console.log(`🚀 Starting activity cycle for ${bots.length} bots...`);
 
-    for (const bot of bots) {
-      try {
-        // Update bot as active
-        await supabase.from('users').update({
-          last_active: new Date().toISOString()
-        }).eq('id', bot.id);
+    try {
+      // Get current room and message context
+      const { data: rooms, error: roomError } = await supabase
+        .from('parallel_rooms')
+        .select('*');
 
-        // Determine if bot should act this cycle
-        if (!this.shouldBotAct(bot)) {
-          console.log(`Bot ${bot.display_name} skipping this cycle`);
-          continue;
-        }
-
-        console.log(`Bot ${bot.display_name} is acting...`);
-        // Choose activity based on bot's behaviors and current app state
-        await this.chooseBotActivity(bot);
-
-      } catch (error) {
-        console.error(`Error in bot activity for ${bot.display_name}:`, error);
+      if (roomError) {
+        console.error('Error fetching rooms:', roomError);
+        return;
       }
+
+      const { data: recentMessages, error: messageError } = await supabase
+        .from('room_messages')
+        .select('*')
+        .gt('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (messageError) {
+        console.error('Error fetching messages:', messageError);
+      }
+
+      console.log(`📊 Context: ${rooms?.length || 0} rooms, ${recentMessages?.length || 0} recent messages`);
+
+      if (!rooms || rooms.length === 0) {
+        console.log('⚠️ No rooms available - bots cannot join or send messages');
+        return;
+      }
+
+      // Force each bot to be active this cycle for testing
+      for (const bot of bots) {
+        console.log(`🤖 Processing bot: ${bot.display_name}`);
+        
+        // Force activity for debugging - remove random chance
+        await this.decideBotActivity(bot, rooms, recentMessages || []);
+        
+        // Small delay between bot actions
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
+      console.log(`✅ Activity cycle complete`);
+    } catch (error) {
+      console.error('Error in runIntelligentActivity:', error);
     }
   }
 
   /**
-   * Determine if bot should act based on personality and activity level
+   * Decide what activity the bot should perform
    */
-  private static shouldBotAct(bot: BotUser): boolean {
-    const baseChances = { high: 0.8, medium: 0.5, low: 0.3 };
-    const personalityModifiers = {
-      encouraging: 1.2,
-      prayer_focused: 1.1, 
-      thoughtful: 0.9,
-      casual: 1.0
-    };
+  private static async decideBotActivity(bot: BotUser, rooms: any[], recentMessages: any[]): Promise<void> {
+    console.log(`🎯 Bot ${bot.display_name} deciding activity...`);
     
-    const chance = baseChances[bot.activity_level] * personalityModifiers[bot.personality];
-    return Math.random() < chance;
-  }
-
-  /**
-   * Choose and execute bot activity intelligently
-   */
-  private static async chooseBotActivity(bot: BotUser): Promise<void> {
-    // Get current app state to make smart decisions
-    const { data: rooms } = await supabase
-      .from('parallel_rooms')
-      .select('*')
-      .eq('is_active', true)
-      .limit(10);
-
-    const { data: recentMessages } = await supabase
-      .from('room_messages')
-      .select('*, room_id')
-      .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-      .order('created_at', { ascending: false })
-      .limit(20);
-
     const activities = [];
     
-    // Build weighted activity list based on bot behaviors and app state
+    // Higher weight = more likely
     if (bot.behaviors.joinRooms && rooms && rooms.length > 0) {
-      activities.push({ type: 'join_room', weight: 0.4 });
+      activities.push({ type: 'join_room', weight: 0.6 });
     }
     
-    if (bot.behaviors.sendMessages && rooms && rooms.length > 0) {
-      activities.push({ type: 'send_message', weight: 0.3 });
+    if (bot.behaviors.sendMessages) {
+      activities.push({ type: 'send_message', weight: 0.8 });
     }
     
     if (bot.behaviors.respondToMessages && recentMessages && recentMessages.length > 0) {
-      activities.push({ type: 'respond_to_message', weight: 0.5 });
+      activities.push({ type: 'respond_to_message', weight: 0.7 });
     }
     
     if (bot.behaviors.prayerRequests) {
-      activities.push({ type: 'prayer_request', weight: 0.2 });
+      activities.push({ type: 'prayer_request', weight: 0.1 });
     }
     
     if (bot.behaviors.moveAround) {
       activities.push({ type: 'move_location', weight: 0.1 });
     }
 
-    if (activities.length === 0) return;
+    if (activities.length === 0) {
+      console.log(`❌ Bot ${bot.display_name} has no enabled behaviors`);
+      return;
+    }
+
+    console.log(`🎲 Bot ${bot.display_name} has ${activities.length} possible activities:`, activities.map(a => a.type));
 
     // Choose activity based on weights
     const totalWeight = activities.reduce((sum, a) => sum + a.weight, 0);
@@ -412,10 +388,13 @@ export class UserSimulatorService {
     for (const activity of activities) {
       random -= activity.weight;
       if (random <= 0) {
+        console.log(`✨ Bot ${bot.display_name} chose: ${activity.type}`);
         await this.executeBotActivity(bot, activity.type, { rooms: rooms || undefined, recentMessages: recentMessages || undefined });
-        break;
+        return;
       }
     }
+    
+    console.log(`❓ Bot ${bot.display_name} didn't choose any activity`);
   }
 
   /**
@@ -426,22 +405,30 @@ export class UserSimulatorService {
     activityType: string, 
     context: { rooms?: any[]; recentMessages?: any[] }
   ): Promise<void> {
-    switch (activityType) {
-      case 'join_room':
-        if (context.rooms) await this.botJoinRoom(bot, context.rooms);
-        break;
-      case 'send_message':
-        if (context.rooms) await this.botSendMessage(bot, context.rooms);
-        break;
-      case 'respond_to_message':
-        if (context.recentMessages) await this.botRespondToMessage(bot, context.recentMessages);
-        break;
-      case 'prayer_request':
-        await this.botSendPrayerRequest(bot);
-        break;
-      case 'move_location':
-        await this.botMoveLocation(bot);
-        break;
+    console.log(`🎬 Executing ${activityType} for bot ${bot.display_name}`);
+    
+    try {
+      switch (activityType) {
+        case 'join_room':
+          if (context.rooms) await this.botJoinRoom(bot, context.rooms);
+          break;
+        case 'send_message':
+          await this.botSendMessage(bot, context.rooms || []);
+          break;
+        case 'respond_to_message':
+          if (context.recentMessages) await this.botRespondToMessage(bot, context.recentMessages);
+          break;
+        case 'prayer_request':
+          await this.botSendPrayerRequest(bot);
+          break;
+        case 'move_location':
+          await this.botMoveLocation(bot);
+          break;
+        default:
+          console.log(`❓ Unknown activity type: ${activityType}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error executing ${activityType} for ${bot.display_name}:`, error);
     }
   }
 
@@ -449,48 +436,112 @@ export class UserSimulatorService {
    * Bot joins a room intelligently
    */
   private static async botJoinRoom(bot: BotUser, rooms: any[]): Promise<void> {
+    console.log(`🚪 Bot ${bot.display_name} attempting to join room...`);
+    console.log(`Available rooms:`, rooms.map(r => ({ 
+      id: r.id, 
+      name: r.name, 
+      occupants: r.current_occupants, 
+      capacity: r.max_capacity,
+      participants: r.current_participants?.length || 0
+    })));
+    
     try {
-      // Prefer rooms with some but not too many participants
-      const suitableRooms = rooms.filter(r => r.current_occupants < r.max_capacity && r.current_occupants < 8);
-      if (suitableRooms.length === 0) return;
+      // Prefer rooms with some but not too many participants - handle undefined occupants
+      const suitableRooms = rooms.filter(r => {
+        const occupants = r.current_occupants || r.current_participants?.length || 0;
+        const capacity = r.max_capacity || 8;
+        const isSuitable = occupants < capacity && occupants < 8;
+        console.log(`Room ${r.name}: occupants=${occupants}, capacity=${capacity}, suitable=${isSuitable}`);
+        return isSuitable;
+      });
+      
+      console.log(`🎯 Suitable rooms for ${bot.display_name}: ${suitableRooms.length}`);
+      
+      if (suitableRooms.length === 0) {
+        console.log(`❌ No suitable rooms for ${bot.display_name} - all full or max capacity reached`);
+        return;
+      }
 
       const room = suitableRooms[Math.floor(Math.random() * suitableRooms.length)];
+      console.log(`🎲 ${bot.display_name} selected room:`, { id: room.id, name: room.name });
       
       // Check if already in room
-      const { data: existing } = await supabase
+      console.log(`🔍 Checking if ${bot.display_name} already in room ${room.id}...`);
+      const { data: existing, error: checkError } = await supabase
         .from('room_participants')
         .select('id')
         .eq('room_id', room.id)
         .eq('user_id', bot.id)
         .eq('is_active', true);
 
-      if (existing && existing.length > 0) return;
+      if (checkError) {
+        console.error(`❌ Error checking room participation:`, checkError);
+        return;
+      }
 
-      // Join room
-      await supabase.from('room_participants').upsert({
+      if (existing && existing.length > 0) {
+        console.log(`⚠️ Bot ${bot.display_name} already in room ${room.id}`);
+        return;
+      }
+
+      console.log(`✅ ${bot.display_name} can join room ${room.id}`);
+
+      // IMPORTANT: Add to both room_participants table AND current_participants array
+      
+      // 1. Add to room_participants table
+      console.log(`📝 Adding ${bot.display_name} to room_participants table...`);
+      const { error: participantError } = await supabase.from('room_participants').upsert({
         room_id: room.id,
         user_id: bot.id,
         joined_at: new Date().toISOString(),
         is_active: true
       });
 
+      if (participantError) {
+        console.error(`❌ Failed to add to room_participants:`, participantError);
+        return;
+      }
+
+      // 2. Add to parallel_rooms.current_participants array
+      console.log(`📝 Adding ${bot.display_name} to current_participants array...`);
+      const currentParticipants = room.current_participants || [];
+      const updatedParticipants = [...currentParticipants, bot.id];
+      const { error: roomUpdateError } = await supabase
+        .from('parallel_rooms')
+        .update({ 
+          current_participants: updatedParticipants,
+          current_occupants: updatedParticipants.length 
+        })
+        .eq('id', room.id);
+
+      if (roomUpdateError) {
+        console.error(`❌ Failed to update room participants:`, roomUpdateError);
+        return;
+      }
+
+      console.log(`🎉 Bot ${bot.display_name} successfully joined room ${room.name || room.id}`);
+
       // Send joining message after realistic delay
+      const delay = this.getResponseDelay(bot.response_speed);
+      console.log(`⏰ Scheduling join message in ${delay}ms...`);
+      
       setTimeout(async () => {
+        console.log(`💬 Sending join message for ${bot.display_name}...`);
         const joinMessages = {
-          encouraging: ["Hi everyone! 😊", "Blessed to join you all", "Good to be here!"],
-          thoughtful: ["Hello, grateful to be here", "Peace to you all", "Joining you in fellowship"],
-          prayer_focused: ["Blessings to all", "Grace and peace", "In His name, hello"],
-          casual: ["Hey there!", "Morning everyone", "What's up, friends?"]
+          encouraging: ["Hi everyone! 😊", "Blessed to join you all", "Good to be here!", "Hope everyone's doing great!"],
+          thoughtful: ["Hello, grateful to be here", "Peace to you all", "Joining you in fellowship", "Good to see this community"],
+          prayer_focused: ["Blessings to all", "Grace and peace", "In His name, hello", "Praying for you all"],
+          casual: ["Hey there!", "Morning everyone", "What's up, friends?", "Good to be here!"]
         };
         
         const messages = joinMessages[bot.personality];
         const message = messages[Math.floor(Math.random() * messages.length)];
         
         await this.sendBotMessage(bot, room.id, message);
-      }, this.getResponseDelay(bot.response_speed));
+      }, delay);
 
     } catch (error) {
-      console.error('Error in botJoinRoom:', error);
+      console.error(`❌ Error in botJoinRoom for ${bot.display_name}:`, error);
     }
   }
 
@@ -499,6 +550,8 @@ export class UserSimulatorService {
    */
   private static async botSendMessage(bot: BotUser, rooms: any[]): Promise<void> {
     try {
+      console.log(`💬 Bot ${bot.display_name} trying to send message...`);
+      
       // Get rooms bot is in
       const { data: participations } = await supabase
         .from('room_participants')
@@ -506,15 +559,23 @@ export class UserSimulatorService {
         .eq('user_id', bot.id)
         .eq('is_active', true);
 
-      if (!participations || participations.length === 0) return;
+      console.log(`📍 Bot ${bot.display_name} is in ${participations?.length || 0} rooms`);
+
+      if (!participations || participations.length === 0) {
+        console.log(`🔄 Bot ${bot.display_name} not in any rooms, trying to join one first...`);
+        // If not in any room, try to join one first
+        await this.botJoinRoom(bot, rooms);
+        return;
+      }
 
       const roomId = participations[Math.floor(Math.random() * participations.length)].room_id;
       const messages = this.messageTemplates[bot.personality].general;
       const message = messages[Math.floor(Math.random() * messages.length)];
       
+      console.log(`📤 Bot ${bot.display_name} sending: "${message}" to room ${roomId}`);
       await this.sendBotMessage(bot, roomId, message);
     } catch (error) {
-      console.error('Error in botSendMessage:', error);
+      console.error(`❌ Error in botSendMessage for ${bot.display_name}:`, error);
     }
   }
 
@@ -565,6 +626,49 @@ export class UserSimulatorService {
   }
 
   /**
+   * Send a message from bot to room
+   */
+  private static async sendBotMessage(bot: BotUser, roomId: string, content: string): Promise<void> {
+    try {
+      // First verify bot is in room's current_participants
+      const { data: room } = await supabase
+        .from('parallel_rooms')
+        .select('current_participants')
+        .eq('id', roomId)
+        .single();
+
+      if (!room || !room.current_participants.includes(bot.id)) {
+        console.log(`❌ Bot ${bot.display_name} not in room participants, cannot send message`);
+        return;
+      }
+
+      const { error } = await supabase.from('room_messages').insert({
+        room_id: roomId,
+        user_id: bot.id,
+        content: content,
+        message_type: 'text',
+        created_at: new Date().toISOString()
+      });
+
+      if (error) {
+        console.error(`❌ Failed to send bot message from ${bot.display_name}:`, error);
+        return;
+      }
+
+      console.log(`✅ Bot ${bot.display_name} sent: "${content}"`);
+
+      // Update last active
+      await supabase
+        .from('users')
+        .update({ last_active: new Date().toISOString() })
+        .eq('id', bot.id);
+
+    } catch (error) {
+      console.error('Error in sendBotMessage:', error);
+    }
+  }
+
+  /**
    * Bot sends prayer request to real users
    */
   private static async botSendPrayerRequest(bot: BotUser): Promise<void> {
@@ -597,85 +701,116 @@ export class UserSimulatorService {
         from_user_id: bot.id,
         to_user_id: targetUser.id,
         request_text: request,
-        status: 'active',
-        is_urgent: Math.random() < 0.15, // 15% chance urgent
+        status: 'pending',
         created_at: new Date().toISOString()
       });
 
+      console.log(`Bot ${bot.display_name} sent prayer request to user ${targetUser.id}`);
     } catch (error) {
       console.error('Error in botSendPrayerRequest:', error);
     }
   }
 
   /**
-   * Bot slightly changes location (simulates movement)
+   * Bot moves to new location
    */
   private static async botMoveLocation(bot: BotUser): Promise<void> {
     try {
-      // Small random movement (within 200m)
-      const latChange = (Math.random() - 0.5) * 0.002;
-      const lngChange = (Math.random() - 0.5) * 0.002;
-      
-      bot.location_lat += latChange;
-      bot.location_lng += lngChange;
-      
-      await supabase.from('users').update({
-        location_lat: bot.location_lat,
-        location_lng: bot.location_lng,
-        last_active: new Date().toISOString()
-      }).eq('id', bot.id);
+      const movement = this.generateSmallMovement();
+      const newLat = bot.location_lat + movement.latDelta;
+      const newLng = bot.location_lng + movement.lngDelta;
 
+      await supabase
+        .from('users')
+        .update({
+          location_lat: newLat,
+          location_lng: newLng,
+          last_active: new Date().toISOString()
+        })
+        .eq('id', bot.id);
+
+      // Update bot object
+      bot.location_lat = newLat;
+      bot.location_lng = newLng;
+
+      console.log(`Bot ${bot.display_name} moved to ${newLat.toFixed(4)}, ${newLng.toFixed(4)}`);
     } catch (error) {
       console.error('Error in botMoveLocation:', error);
     }
   }
 
-  /**
-   * Send message with bot's personality
-   */
-  private static async sendBotMessage(bot: BotUser, roomId: string, content: string): Promise<void> {
-    await supabase.from('room_messages').insert({
-      room_id: roomId,
-      user_id: bot.id,
-      content,
-      message_type: 'text',
-      created_at: new Date().toISOString()
-    });
-  }
-
-  /**
-   * Get response delay based on bot's response speed
-   */
-  private static getResponseDelay(speed: BotUser['response_speed']): number {
-    const delays = { 
-      instant: 100, 
-      realistic: 2000 + Math.random() * 4000, // 2-6 seconds
-      slow: 5000 + Math.random() * 10000 // 5-15 seconds
-    };
-    return delays[speed];
-  }
-
-  /**
-   * Generate location nearby with realistic distribution
-   */
-  private static generateLocationNearby(centerLat: number, centerLng: number, radiusKm: number) {
-    const radiusInDegrees = radiusKm / 111.32;
+  // Helper methods
+  private static distributePersonalities(count: number, mix: any): ('encouraging' | 'thoughtful' | 'prayer_focused' | 'casual')[] {
+    const personalities: ('encouraging' | 'thoughtful' | 'prayer_focused' | 'casual')[] = [];
+    const total = mix.encouraging + mix.thoughtful + mix.prayer_focused + mix.casual;
     
-    // Use normal distribution for more realistic clustering
-    const u = Math.random();
-    const v = Math.random();
-    const distance = radiusInDegrees * Math.sqrt(-2 * Math.log(u)) * 0.3; // Cluster closer to center
-    const angle = 2 * Math.PI * v;
+    const encouragingCount = Math.round((mix.encouraging / total) * count);
+    const thoughtfulCount = Math.round((mix.thoughtful / total) * count);
+    const prayerCount = Math.round((mix.prayer_focused / total) * count);
+    const casualCount = count - encouragingCount - thoughtfulCount - prayerCount;
+
+    for (let i = 0; i < encouragingCount; i++) personalities.push('encouraging');
+    for (let i = 0; i < thoughtfulCount; i++) personalities.push('thoughtful');
+    for (let i = 0; i < prayerCount; i++) personalities.push('prayer_focused');
+    for (let i = 0; i < casualCount; i++) personalities.push('casual');
+
+    // Shuffle array
+    for (let i = personalities.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [personalities[i], personalities[j]] = [personalities[j], personalities[i]];
+    }
+
+    return personalities;
+  }
+
+  private static generateLocationNearby(centerLat: number, centerLng: number, spreadKm: number): { lat: number; lng: number } {
+    const latDelta = (Math.random() - 0.5) * 2 * (spreadKm / 111.32);
+    const lngDelta = (Math.random() - 0.5) * 2 * (spreadKm / (111.32 * Math.cos(centerLat * Math.PI / 180)));
     
     return {
-      lat: centerLat + (distance * Math.cos(angle)),
-      lng: centerLng + (distance * Math.sin(angle))
+      lat: centerLat + latDelta,
+      lng: centerLng + lngDelta
     };
   }
 
+  private static generateSmallMovement(): { latDelta: number; lngDelta: number } {
+    return {
+      latDelta: (Math.random() - 0.5) * 0.002,
+      lngDelta: (Math.random() - 0.5) * 0.002
+    };
+  }
+
+  private static getActivityProbability(level: 'low' | 'medium' | 'high'): number {
+    switch (level) {
+      case 'high': return 0.8;
+      case 'medium': return 0.4;
+      case 'low': return 0.2;
+      default: return 0.3;
+    }
+  }
+
   /**
-   * Stop simulation and cleanup
+   * Get activity interval based on level
    */
+  private static getActivityInterval(level: 'low' | 'medium' | 'high'): number {
+    switch (level) {
+      case 'high': return 8000;   // 8 seconds - very active
+      case 'medium': return 15000; // 15 seconds  
+      case 'low': return 30000;    // 30 seconds
+      default: return 20000;
+    }
+  }
+
+  private static getResponseDelay(speed: 'instant' | 'realistic' | 'slow'): number {
+    switch (speed) {
+      case 'instant': return 500;
+      case 'realistic': return 2000 + Math.random() * 3000;
+      case 'slow': return 5000 + Math.random() * 10000;
+      default: return 2000;
+    }
+  }
+
+  // Public methods
   static stopSimulation(simulationId: string): void {
     const interval = this.activeIntervals.get(simulationId);
     if (interval) {
@@ -683,62 +818,139 @@ export class UserSimulatorService {
       this.activeIntervals.delete(simulationId);
     }
     
-    // Remove bot IDs from tracking when stopping
     const bots = this.activeBots.get(simulationId);
-    if (bots && Array.isArray(bots)) {
+    if (bots) {
       bots.forEach(bot => this.allBotIds.delete(bot.id));
+      this.activeBots.delete(simulationId);
     }
     
-    this.activeBots.delete(simulationId);
-    this.cleanupBotData();
+    console.log(`Stopped simulation ${simulationId}`);
   }
 
   /**
-   * Clean up all bot data
-   */
-  private static async cleanupBotData(): Promise<void> {
-    try {
-      // Get all bot IDs from database
-      const { data: botUsers } = await supabase
-        .from('users')
-        .select('id')
-        .eq('is_simulated', true);
-      
-      if (!botUsers || botUsers.length === 0) return;
-      
-      const botIds = botUsers.map(u => u.id);
-      
-      // Remove from all related tables
-      await supabase.from('room_participants').delete().in('user_id', botIds);
-      await supabase.from('room_messages').delete().in('user_id', botIds);
-      await supabase.from('prayer_requests').delete().in('from_user_id', botIds);
-      await supabase.from('users').delete().eq('is_simulated', true);
-      
-      // Clear tracking
-      this.allBotIds.clear();
-      
-    } catch (error) {
-      console.error('Error cleaning up bot data:', error);
-    }
-  }
-
-  /**
-   * Get active simulations
+   * Get active simulation IDs
    */
   static getActiveSimulations(): string[] {
-    return Array.from(this.activeIntervals.keys());
+    return Array.from(this.activeBots.keys());
   }
 
   /**
-   * Trigger immediate activity for testing
+   * Trigger immediate bot activity for all active simulations (for testing)
    */
   static async triggerActivityBurst(): Promise<void> {
-    for (const [simId, bots] of this.activeBots.entries()) {
-      if (bots && bots.length > 0) {
-        for (const bot of bots.slice(0, 3)) { // Trigger activity for first 3 bots
-          await this.chooseBotActivity(bot);
+    console.log('🚀 Triggering activity burst for all active bots...');
+    
+    console.log(`📊 Active simulations: ${this.activeBots.size}`);
+    console.log(`📊 Simulation IDs:`, Array.from(this.activeBots.keys()));
+    
+    for (const [simulationId, bots] of this.activeBots.entries()) {
+      console.log(`Running activity for ${bots.length} bots in simulation ${simulationId}`);
+      console.log(`Bot names:`, bots.map(b => b.display_name));
+      
+      // Get current context
+      const { data: rooms } = await supabase
+        .from('parallel_rooms')
+        .select('*');
+
+      const { data: recentMessages } = await supabase
+        .from('room_messages')
+        .select('*')
+        .gt('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      console.log(`Context: ${rooms?.length || 0} rooms, ${recentMessages?.length || 0} recent messages`);
+      
+      if (!rooms || rooms.length === 0) {
+        console.log('❌ No rooms available for bots to join');
+        continue;
+      }
+
+      // Force each bot to do something - using direct method calls
+      for (let i = 0; i < bots.length; i++) {
+        const bot = bots[i];
+        console.log(`🤖 Processing bot ${i + 1}/${bots.length}: ${bot.display_name} (${bot.id})`);
+        console.log(`Bot behaviors:`, bot.behaviors);
+        
+        try {
+          // Force bot to join room first
+          console.log(`🎯 Forcing ${bot.display_name} to join room...`);
+          await this.botJoinRoom(bot, rooms);
+          
+          // Small delay then force message
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          console.log(`🎯 Forcing ${bot.display_name} to send message...`);
+          await this.botSendMessage(bot, rooms);
+          
+          // Small delay between bots to prevent spam
+          console.log(`⏳ Waiting 500ms before next bot...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error(`❌ Error with bot ${bot.display_name}:`, error);
         }
       }
+    }
+    
+    console.log('✅ Activity burst complete');
+  }
+
+  /**
+   * Fallback method to insert bot without auth constraints
+   */
+  private static async insertBotDirectly(bot: BotUser): Promise<void> {
+    try {
+      console.log(`Trying fallback creation for bot ${bot.display_name}...`);
+      
+      // Try using SQL function to bypass constraints
+      const { data, error: sqlError } = await supabase.rpc('insert_simulated_user', {
+        p_display_name: bot.display_name,
+        p_email: `${bot.id}@bot.local`,
+        p_location_lat: bot.location_lat,
+        p_location_lng: bot.location_lng,
+        p_care_score: Math.floor(Math.random() * 50) + 25
+      });
+
+      if (sqlError) {
+        console.warn(`RPC failed for ${bot.display_name}, trying direct insert:`, sqlError);
+        
+        // Final attempt: insert without ID constraint
+        const { data: directData, error: directError } = await supabase
+          .from('users')
+          .insert({
+            display_name: bot.display_name,
+            location_lat: bot.location_lat,
+            location_lng: bot.location_lng,
+            location_sharing: bot.location_sharing,
+            last_active: bot.last_active,
+            is_simulated: true,
+            email: `${Math.random().toString(36)}@bot.local`, // Random email
+            created_at: new Date().toISOString(),
+            care_score: Math.floor(Math.random() * 50) + 25
+          })
+          .select('id')
+          .single();
+        
+        if (directError) {
+          throw directError;
+        }
+        
+        if (directData) {
+          bot.id = directData.id;
+          this.allBotIds.add(directData.id);
+          console.log(`✅ Created bot ${bot.display_name} with ID ${directData.id}`);
+        }
+      } else {
+        // RPC succeeded
+        if (data) {
+          bot.id = data;
+          this.allBotIds.add(data);
+          console.log(`✅ Created bot ${bot.display_name} via RPC with ID ${data}`);
+        }
+      }
+    } catch (error) {
+      console.error(`❌ All creation methods failed for ${bot.display_name}:`, error);
+      throw error;
     }
   }
 }

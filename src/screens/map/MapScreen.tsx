@@ -175,7 +175,7 @@ export default function MapScreen() {
 			});
 
 			const { data, error } = await supabase
-				.from("all_users_for_map")
+				.from("users")
 				.select("id, location_lat, location_lng")
 				.neq("id", user.id)
 				.not("location_lat", "is", null)
