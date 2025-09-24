@@ -374,7 +374,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 			color: theme.colors.onSurface,
 		},
 		bioInput: {
-			backgroundColor: "transparent",
+			backgroundColor: theme.colors.surface,
 		},
 		bioInputContent: {
 			paddingTop: 12,
@@ -620,6 +620,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 									value={editingBio}
 									onChangeText={setEditingBio}
 									style={styles.bioInput}
+									textColor={theme.colors.onSurface}
 									mode="outlined"
 									placeholder="Tell others about yourself..."
 									multiline
